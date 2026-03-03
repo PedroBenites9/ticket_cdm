@@ -22,7 +22,7 @@ export default function Register({ cambiarVista }) {
     e.preventDefault();
 
     try {
-      const respuesta = await fetch('https://back-tickets-u01r.onrender.com', {
+      const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/usuarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
