@@ -17,7 +17,7 @@ export default function Main({ cambiarVista, usuario }) {
   useEffect(() => {
     const obtenerTickets = async () => {
       try {
-        const respuesta = await fetch('https://back-tickets-u01r.onrender.com');
+        const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/tickets');
         const datosReales = await respuesta.json();
         setTickets(datosReales);
       } catch (error) {
@@ -46,7 +46,7 @@ export default function Main({ cambiarVista, usuario }) {
   const guardarTicket = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('http://localhost:3000/api/tickets', {
+      const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
@@ -66,7 +66,7 @@ export default function Main({ cambiarVista, usuario }) {
 
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {
-      await fetch(`http://localhost:3000/api/tickets/${idTabla}`, {
+      await fetch(`https://back-tickets-u01r.onrender.com/api/tickets/${idTabla}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
@@ -89,7 +89,7 @@ export default function Main({ cambiarVista, usuario }) {
     const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
     if (confirmar) {
       try {
-        await fetch(`http://localhost:3000/api/tickets/${idTabla}`, { method: 'DELETE' });
+        await fetch(`https://back-tickets-u01r.onrender.com/api/tickets/${idTabla}`, { method: 'DELETE' });
         const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
         setTickets(ticketsRestantes);
         
