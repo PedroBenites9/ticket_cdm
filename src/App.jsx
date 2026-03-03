@@ -1,22 +1,35 @@
-import { useState } from "react";
-import Login from "./components/Login";
-import Register from "./components/Register";
-import Main from "./components/Main";
+import { useState } from 'react'
+import { Toaster } from 'sonner'
+import Login from './components/Login'
+import Register from './components/Register'
+import Main from './components/Main'
 
 export default function App() {
-  // Estado inicial: empezamos en la pantalla de 'login'
-  const [vistaActual, setVistaActual] = useState("login");
+  // Revisa si hay token. Si hay, va a 'main', si no, a 'login'
+  const [vistaActual, setVistaActual] = useState(() => {
+    return localStorage.getItem('token_acceso') ? 'main' : 'login';
+  });
+  
+  // Revisa si hay un nombre guardado. Si no, arranca vacío
+  const [usuarioActual, setUsuarioActual] = useState(() => {
+    return localStorage.getItem('nombre_usuario') || '';
+  }); 
 
   return (
     <div>
-      {/* Condicionales de React: Si la vistaActual es 'X', mostramos el componente <X /> */}
+      <Toaster richColors position="top-right" />
 
-      {vistaActual === "login" && <Login cambiarVista={setVistaActual} />}
+      {vistaActual === 'login' && (
+        <Login cambiarVista={setVistaActual} setUsuarioActual={setUsuarioActual} />
+      )}
 
-      {vistaActual === "register" && <Register cambiarVista={setVistaActual} />}
+      {vistaActual === 'register' && (
+        <Register cambiarVista={setVistaActual} />
+      )}
 
-      {vistaActual === "main" && <Main cambiarVista={setVistaActual} />}
-      {console.log(vistaActual)}
+      {vistaActual === 'main' && (
+        <Main cambiarVista={setVistaActual} usuario={usuarioActual} />
+      )}
     </div>
-  );
+  )
 }

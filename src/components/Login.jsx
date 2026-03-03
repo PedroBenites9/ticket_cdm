@@ -1,51 +1,99 @@
-// src/components/Login.jsx
+import { useState } from 'react';
+import { toast } from 'sonner';
+import {motion} from 'framer-motion'; 
 
-// 1. Recibimos la función 'cambiarVista' entre llaves
-export default function Login({ cambiarVista }) {
+export default function Login({ cambiarVista, setUsuarioActual }) { 
+  const [formulario, setFormulario] = useState({
+    email: '',
+    password: ''
+  });
+
+  const manejarCambio = (e) => {
+    setFormulario({
+      ...formulario,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const manejarIngreso = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const respuesta = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formulario)
+      });
+
+      const datos = await respuesta.json();
+
+      if (respuesta.ok) {
+        // 1. Guardamos el Token JWT en la memoria del navegador
+        localStorage.setItem('token_acceso', datos.token);
+        localStorage.setItem('nombre_usuario', datos.usuario.nombre); // <-- NUEVO: Guardamos el nombre
+        setUsuarioActual(datos.usuario.nombre);
+        toast.success(`¡Bienvenido de nuevo, ${datos.usuario.nombre}!`);
+        cambiarVista('main');
+        
+        // 2. Le pasamos el nombre real del usuario a App.jsx para que lo muestre arriba
+        setUsuarioActual(datos.usuario.nombre);
+        
+        // 3. Lo dejamos pasar al panel principal
+        cambiarVista('main');
+      } else {
+        // Si la contraseña o el correo están mal, mostramos el error
+        toast.error(datos.error || "Credenciales incorrectas.");
+      }
+    } catch (error) {
+      console.error("Error de conexión:", error);
+      toast.error("No se pudo conectar con el servidor.");
+    }
+  };
+  
   return (
-    <div className="container mt-5">
+<motion.div className="container mt-5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
       <div className="row justify-content-center">
         <div className="col-md-4 text-center">
           <h2 className="mb-4">Iniciar Sesión</h2>
-
           <div className="card shadow-sm p-4">
-            {/* Nota: En React usamos className en lugar de class */}
-            <input
-              type="email"
-              className="form-control mb-3"
-              placeholder="Correo electrónico"
-            />
-            <input
-              type="password"
-              className="form-control mb-3"
-              placeholder="Contraseña"
-            />
-
-            {/* 2. Al hacer clic, ejecutamos la función para ir a 'main' */}
-            <button
-              className="btn btn-primary w-100"
-              onClick={() => cambiarVista("main")}
-            >
-              Ingresar
-            </button>
-
+            
+            <form onSubmit={manejarIngreso}>
+              <input 
+                type="email" 
+                className="form-control mb-3" 
+                name="email"
+                placeholder="Correo electrónico" 
+                value={formulario.email}
+                onChange={manejarCambio}
+                required
+              />
+              <input 
+                type="password" 
+                className="form-control mb-3" 
+                name="password"
+                placeholder="Contraseña" 
+                value={formulario.password}
+                onChange={manejarCambio}
+                required
+              />
+              
+              <button type="submit" className="btn btn-primary w-100">
+                Ingresar
+              </button>
+            </form>
+            
             <p className="mt-3 mb-0">
-              ¿No tienes cuenta?{" "}
-              {/* 3. Al hacer clic, ejecutamos la función para ir a 'register' */}
-              <a
-                href="#"
-                className="text-decoration-none"
-                onClick={(e) => {
-                  e.preventDefault(); // Esto evita que el enlace recargue la página
-                  cambiarVista("register");
-                }}
-              >
+              ¿No tienes cuenta?{' '}
+              <a href="#" className="text-decoration-none" onClick={(e) => { 
+                e.preventDefault(); 
+                cambiarVista('register'); 
+              }}>
                 Regístrate aquí
               </a>
             </p>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </motion.div>
+  )
 }
