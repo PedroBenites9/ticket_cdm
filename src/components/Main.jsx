@@ -102,9 +102,17 @@ export default function Main({ cambiarVista, usuario }) {
   };
 
   const ticketsFiltrados = tickets.filter((ticket) => 
+  {
+
     ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
     ticket.codigo.toLowerCase().includes(busqueda.toLowerCase())
+  }
   );
+      // Cálculos para el Panel de Estadísticas
+  const totalTickets = tickets.length;
+  const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
+  const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
+  const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
@@ -134,6 +142,41 @@ export default function Main({ cambiarVista, usuario }) {
           <button className="btn btn-primary" onClick={() => setMostrarModal(true)}>
             + Nuevo Ticket
           </button>
+        </div>
+        {/* PANEL DE ESTADÍSTICAS */}
+        <div className="row mb-4">
+          <div className="col-md-3 col-6 mb-3">
+            <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
+              <div className="card-body py-3">
+                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total</h6>
+                <h3 className="mb-0 fw-bold">{totalTickets}</h3>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3 col-6 mb-3">
+            <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
+              <div className="card-body py-3">
+                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Abiertos</h6>
+                <h3 className="mb-0 fw-bold">{ticketsAbiertos}</h3>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3 col-6 mb-3">
+            <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
+              <div className="card-body py-3">
+                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Proceso</h6>
+                <h3 className="mb-0 fw-bold">{ticketsEnProceso}</h3>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3 col-6 mb-3">
+            <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
+              <div className="card-body py-3">
+                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Resueltos</h6>
+                <h3 className="mb-0 fw-bold">{ticketsResueltos}</h3>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="mb-3">
