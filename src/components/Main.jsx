@@ -17,7 +17,7 @@ export default function Main({ cambiarVista, usuario }) {
   useEffect(() => {
     const obtenerTickets = async () => {
       try {
-        const respuesta = await fetch('http://localhost:3000/api/tickets');
+        const respuesta = await fetch('https://back-tickets-u01r.onrender.com');
         const datosReales = await respuesta.json();
         setTickets(datosReales);
       } catch (error) {
