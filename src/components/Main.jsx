@@ -144,7 +144,7 @@ export default function Main({ cambiarVista, usuario }) {
       <header className="navbar navbar-dark bg-dark shadow-sm">
         <div className="container">
           <span className="navbar-brand">
-            <strong>🔧 Gestión de Obras y Soporte</strong>
+            <strong>🔧 Sistema de Tickets </strong>
           </span>
           <div className="d-flex align-items-center gap-3">
             <span className="text-light d-none d-md-inline">
