@@ -6,16 +6,17 @@ export default function Main({ cambiarVista, usuario }) {
   const [tickets, setTickets] = useState([]);
   const [cargando, setCargando] = useState(true); 
   const [mostrarModal, setMostrarModal] = useState(false);
-  
-  // 1. NUEVO: Esta variable nos dice si estamos creando (null) o editando (ej: ID 5)
   const [editandoId, setEditandoId] = useState(null); 
 
   const [busqueda, setBusqueda] = useState('');
+  
+  // 1. NUEVO: Estado para saber qué categoría estamos mirando (por defecto "Todas")
+  const [filtroCategoria, setFiltroCategoria] = useState('Todas');
+
   const [formulario, setFormulario] = useState({
     asunto: '', categoria: '', prioridad: 'Media', descripcion: ''
   });
 
-  // 2. NUEVO: Centralizamos tu URL para que el código quede súper limpio
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
 
   useEffect(() => {
@@ -44,14 +45,12 @@ export default function Main({ cambiarVista, usuario }) {
     setFormulario({ ...formulario, [e.target.name]: e.target.value });
   };
 
-  // 3. NUEVO: Abrir modal totalmente en blanco (Crear)
   const abrirModalCrear = () => {
     setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '' });
     setEditandoId(null);
     setMostrarModal(true);
   };
 
-  // 4. NUEVO: Abrir modal y rellenarlo con los datos del ticket tocado (Editar)
   const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto,
@@ -59,41 +58,33 @@ export default function Main({ cambiarVista, usuario }) {
       prioridad: ticket.prioridad,
       descripcion: ticket.descripcion
     });
-    setEditandoId(ticket.id); // Le decimos a React: "Ojo, estamos editando este ticket"
+    setEditandoId(ticket.id);
     setMostrarModal(true);
   };
 
-  // 5. MODIFICADO: Esta función ahora sirve para ambas cosas
   const guardarTicket = async (e) => {
     e.preventDefault();
     try {
       if (editandoId) {
-        // --- MODO EDICIÓN ---
         const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formulario)
         });
         const ticketActualizado = await respuesta.json();
-        
-        // Buscamos el viejo en la tabla y lo reemplazamos por el actualizado
         const ticketsNuevos = tickets.map(t => t.id === editandoId ? ticketActualizado : t);
         setTickets(ticketsNuevos);
         toast.success("¡Ticket actualizado correctamente!");
-
       } else {
-        // --- MODO CREACIÓN ---
         const respuesta = await fetch(`${URL_API}/tickets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formulario)
         });
         const ticketCreado = await respuesta.json();
-        
         setTickets([ticketCreado, ...tickets]);
         toast.success("¡Ticket generado correctamente!"); 
       }
-      
       setMostrarModal(false);
     } catch (error) {
       toast.error("Hubo un problema al procesar el ticket.");
@@ -133,12 +124,16 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
-  const ticketsFiltrados = tickets.filter((ticket) => 
-    ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
-    ticket.codigo.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  // 2. NUEVO: Lógica combinada. Filtra por texto (buscador) Y ADEMÁS por el botón que tocaste
+  const ticketsFiltrados = tickets.filter((ticket) => {
+    const coincideTexto = ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
+                          ticket.codigo.toLowerCase().includes(busqueda.toLowerCase());
+                          
+    const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
+    
+    return coincideTexto && coincideCategoria;
+  });
 
-  // Cálculos para el Panel de Estadísticas
   const totalTickets = tickets.length;
   const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
   const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
@@ -169,13 +164,11 @@ export default function Main({ cambiarVista, usuario }) {
       <main className="container mt-5">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h2 className="h3 text-secondary">Mis Incidencias</h2>
-          {/* Cambiamos la función del botón de crear */}
           <button className="btn btn-primary" onClick={abrirModalCrear}>
             + Nuevo Ticket
           </button>
         </div>
 
-        {/* PANEL DE ESTADÍSTICAS */}
         <div className="row mb-4">
           <div className="col-md-3 col-6 mb-3">
             <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
@@ -211,11 +204,40 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         </div>
 
+        {/* 3. NUEVO: Los botones de filtro rápido */}
+        <div className="d-flex flex-wrap gap-2 mb-3">
+          <button 
+            className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`}
+            onClick={() => setFiltroCategoria('Todas')}
+          >
+            Todas
+          </button>
+          <button 
+            className={`btn btn-sm ${filtroCategoria === 'CCTV y Seguridad' ? 'btn-primary' : 'btn-outline-primary'}`}
+            onClick={() => setFiltroCategoria('CCTV y Seguridad')}
+          >
+            📹 CCTV y Alarmas
+          </button>
+          <button 
+            className={`btn btn-sm ${filtroCategoria === 'Terminaciones' ? 'btn-warning' : 'btn-outline-warning'}`}
+            onClick={() => setFiltroCategoria('Terminaciones')}
+          >
+            🧱 Terminaciones
+          </button>
+          <button 
+            className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`}
+            onClick={() => setFiltroCategoria('Hardware e Insumos')}
+          >
+            💻 Hardware
+          </button>
+        </div>
+
         <div className="mb-3">
           <input type="text" className="form-control" placeholder="🔍 Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         
         <div className="card shadow-sm">
+          {/* ... LA TABLA QUEDA EXACTAMENTE IGUAL ... */}
           <div className="card-body p-0">
             <table className="table table-hover mb-0 text-center align-middle">
               <thead className="table-light">
@@ -258,10 +280,7 @@ export default function Main({ cambiarVista, usuario }) {
                             <option value="En Proceso">En Proceso</option>
                             <option value="Resuelto">Resuelto</option>
                           </select>
-                          
-                          {/* 6. NUEVO: El botón del Lápiz */}
                           <button className="btn btn-warning btn-sm text-white" title="Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
-                          
                           <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
                         </div>
                       </td>
@@ -278,13 +297,12 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
       </main>
 
-      {/* EL MODAL DE CREACIÓN / EDICIÓN */}
+      {/* EL MODAL DE CREACIÓN / EDICIÓN QUEDA EXACTAMENTE IGUAL */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
-                {/* Cambiamos el título dependiendo del modo */}
                 <h5 className="modal-title">{editandoId ? "Editar Ticket" : "Reportar Incidencia o Tarea"}</h5>
                 <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
               </div>
@@ -302,7 +320,7 @@ export default function Main({ cambiarVista, usuario }) {
                         <option value="" disabled>Seleccione...</option>
                         <option value="CCTV y Seguridad">CCTV y Seguridad</option>
                         <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
-                        <option value="Terminaciones">Redes</option>
+                        <option value="Terminaciones">Terminaciones en Obra</option>
                         <option value="Hardware e Insumos">Hardware e Insumos</option>
                       </select>
                     </div>
@@ -322,7 +340,6 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cancelar</button>
-                  {/* Cambiamos el texto del botón dependiendo del modo */}
                   <button type="submit" className="btn btn-primary">{editandoId ? "Actualizar Cambios" : "Guardar Ticket"}</button>
                 </div>
               </form>
