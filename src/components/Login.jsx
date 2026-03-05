@@ -29,9 +29,13 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
 
       const datos = await respuesta.json();
 
-      if (respuesta.ok) {
+   if (respuesta.ok) {
         localStorage.setItem('token_acceso', datos.token);
         localStorage.setItem('nombre_usuario', datos.usuario.nombre);
+        
+        // ---> NUEVO: Guardamos el rol en la memoria del navegador
+        localStorage.setItem('rol_usuario', datos.usuario.rol); 
+        
         setUsuarioActual(datos.usuario.nombre);
         toast.success(`¡Bienvenido de nuevo, ${datos.usuario.nombre}!`);
         cambiarVista('main');

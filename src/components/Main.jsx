@@ -7,10 +7,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [cargando, setCargando] = useState(true); 
   const [mostrarModal, setMostrarModal] = useState(false);
   const [editandoId, setEditandoId] = useState(null); 
-
   const [busqueda, setBusqueda] = useState('');
-  
-  // 1. NUEVO: Estado para saber qué categoría estamos mirando (por defecto "Todas")
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
 
   const [formulario, setFormulario] = useState({
@@ -18,6 +15,9 @@ export default function Main({ cambiarVista, usuario }) {
   });
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+  
+  // 1. NUEVO: Leemos el rol del usuario (si no hay, por seguridad es "final")
+  const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   useEffect(() => {
     const obtenerTickets = async () => {
@@ -98,7 +98,6 @@ export default function Main({ cambiarVista, usuario }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
       });
-
       const ticketsActualizados = tickets.map((ticket) => {
         if (ticket.id === idTabla) return { ...ticket, estado: nuevoEstado };
         return ticket;
@@ -110,33 +109,45 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
+  // 2. NUEVO: Función para que el técnico se asigne el ticket
+  const asignarmeTicket = async (idTabla) => {
+    try {
+      // Nota: Esta ruta la crearemos en el Backend en el próximo paso
+      await fetch(`${URL_API}/tickets/asignar/${idTabla}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tecnico: usuario })
+      });
+      const ticketsActualizados = tickets.map((t) =>
+        t.id === idTabla ? { ...t, tecnico_asignado: usuario } : t
+      );
+      setTickets(ticketsActualizados);
+      toast.success("Te has asignado este ticket.");
+    } catch (error) {
+      toast.error("Error al asignarse el ticket.");
+    }
+  };
+
   const eliminarTicket = async (idTabla) => {
     const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
     if (confirmar) {
       try {
-       const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
+        const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
+        if (!respuesta.ok) throw new Error("Fallo en servidor");
         
-        // NUEVO: Si Render nos devuelve un error 500, lanzamos un error a propósito
-        if (!respuesta.ok) {
-          throw new Error("El servidor falló al borrar");
-        }
-
         const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
         setTickets(ticketsRestantes);
-        toast.error("Ticket eliminado del sistema.");
+        toast.error("Ticket eliminado del sistema."); 
       } catch (error) {
         toast.error("Error al intentar eliminar.");
       }
     }
   };
 
-  // 2. NUEVO: Lógica combinada. Filtra por texto (buscador) Y ADEMÁS por el botón que tocaste
   const ticketsFiltrados = tickets.filter((ticket) => {
     const coincideTexto = ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
-                          ticket.codigo.toLowerCase().includes(busqueda.toLowerCase());
-                          
+                          (ticket.codigo && ticket.codigo.toLowerCase().includes(busqueda.toLowerCase()));
     const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
-    
     return coincideTexto && coincideCategoria;
   });
 
@@ -150,18 +161,19 @@ export default function Main({ cambiarVista, usuario }) {
       <header className="navbar navbar-dark bg-dark shadow-sm">
         <div className="container">
           <span className="navbar-brand">
-            <strong>🔧 Sistema de Tickets </strong>
+            <strong>🔧 Gestión de Obras</strong>
           </span>
           <div className="d-flex align-items-center gap-3">
             <span className="text-light d-none d-md-inline">
-              Hola, <strong>{usuario}</strong> 👋
+              Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
             </span>
             <button className="btn btn-outline-light btn-sm" onClick={() => {
               localStorage.removeItem('token_acceso'); 
               localStorage.removeItem('nombre_usuario');
+              localStorage.removeItem('rol_usuario'); // Limpiamos el rol al salir
               cambiarVista('login');
             }}>
-              Cerrar Sesión
+              Salir
             </button>
           </div>
         </div>
@@ -175,67 +187,49 @@ export default function Main({ cambiarVista, usuario }) {
           </button>
         </div>
 
-        <div className="row mb-4">
-          <div className="col-md-3 col-6 mb-3">
-            <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
-              <div className="card-body py-3">
-                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total</h6>
-                <h3 className="mb-0 fw-bold">{totalTickets}</h3>
+        {/* 3. NUEVO: Solo el Administrador ve las tarjetas de conteo */}
+        {rolUsuario === 'admin' && (
+          <div className="row mb-4">
+            <div className="col-md-3 col-6 mb-3">
+              <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
+                <div className="card-body py-3">
+                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total</h6>
+                  <h3 className="mb-0 fw-bold">{totalTickets}</h3>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-3 col-6 mb-3">
+              <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
+                <div className="card-body py-3">
+                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Abiertos</h6>
+                  <h3 className="mb-0 fw-bold">{ticketsAbiertos}</h3>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-3 col-6 mb-3">
+              <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
+                <div className="card-body py-3">
+                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Proceso</h6>
+                  <h3 className="mb-0 fw-bold">{ticketsEnProceso}</h3>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-3 col-6 mb-3">
+              <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
+                <div className="card-body py-3">
+                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Resueltos</h6>
+                  <h3 className="mb-0 fw-bold">{ticketsResueltos}</h3>
+                </div>
               </div>
             </div>
           </div>
-          <div className="col-md-3 col-6 mb-3">
-            <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
-              <div className="card-body py-3">
-                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Abiertos</h6>
-                <h3 className="mb-0 fw-bold">{ticketsAbiertos}</h3>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3 col-6 mb-3">
-            <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
-              <div className="card-body py-3">
-                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Proceso</h6>
-                <h3 className="mb-0 fw-bold">{ticketsEnProceso}</h3>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3 col-6 mb-3">
-            <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
-              <div className="card-body py-3">
-                <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Resueltos</h6>
-                <h3 className="mb-0 fw-bold">{ticketsResueltos}</h3>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
 
-        {/* 3. NUEVO: Los botones de filtro rápido */}
         <div className="d-flex flex-wrap gap-2 mb-3">
-          <button 
-            className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`}
-            onClick={() => setFiltroCategoria('Todas')}
-          >
-            Todas
-          </button>
-          <button 
-            className={`btn btn-sm ${filtroCategoria === 'CCTV y Seguridad' ? 'btn-primary' : 'btn-outline-primary'}`}
-            onClick={() => setFiltroCategoria('CCTV y Seguridad')}
-          >
-            📹 CCTV y Alarmas
-          </button>
-          <button 
-            className={`btn btn-sm ${filtroCategoria === 'Redes' ? 'btn-warning' : 'btn-outline-warning'}`}
-            onClick={() => setFiltroCategoria('Redes')}
-          >
-            🛜 Redes
-          </button>
-          <button 
-            className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`}
-            onClick={() => setFiltroCategoria('Hardware e Insumos')}
-          >
-            💻 Hardware
-          </button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'CCTV y Seguridad' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('CCTV y Seguridad')}>📹 CCTV y Alarmas</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Terminaciones' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Terminaciones')}>🧱 Terminaciones</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware</button>
         </div>
 
         <div className="mb-3">
@@ -243,8 +237,7 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
         
         <div className="card shadow-sm">
-          {/* ... LA TABLA QUEDA EXACTAMENTE IGUAL ... */}
-          <div className="card-body p-0">
+          <div className="card-body p-0 table-responsive">
             <table className="table table-hover mb-0 text-center align-middle">
               <thead className="table-light">
                 <tr>
@@ -252,24 +245,15 @@ export default function Main({ cambiarVista, usuario }) {
                   <th>Asunto</th>
                   <th>Categoría</th>
                   <th>Prioridad</th>
+                  {/* Nueva columna */}
+                  <th>Técnico Asignado</th> 
                   <th>Estado</th>
-                  <th>Fecha</th>
                   <th>Acciones</th> 
                 </tr>
               </thead>
               <tbody>
                 {cargando ? (
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <tr key={index} className="placeholder-glow">
-                      <td><span className="placeholder col-8 bg-secondary"></span></td>
-                      <td><span className="placeholder col-10 bg-secondary"></span></td>
-                      <td><span className="placeholder col-8 bg-secondary"></span></td>
-                      <td><span className="placeholder col-6 bg-secondary"></span></td>
-                      <td><span className="placeholder col-8 bg-secondary"></span></td>
-                      <td><span className="placeholder col-8 bg-secondary"></span></td>
-                      <td><span className="placeholder col-12 bg-secondary"></span></td>
-                    </tr>
-                  ))
+                  <tr><td colSpan="7">Cargando...</td></tr>
                 ) : ticketsFiltrados.length > 0 ? (
                   ticketsFiltrados.map((ticket) => (
                     <tr key={ticket.id}>
@@ -277,17 +261,40 @@ export default function Main({ cambiarVista, usuario }) {
                       <td>{ticket.asunto}</td>
                       <td>{ticket.categoria}</td>
                       <td>{ticket.prioridad}</td>
+                      
+                      {/* Mostramos quién es el técnico */}
+                      <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
+                      
                       <td><span className={`badge ${obtenerColorEstado(ticket.estado)}`}>{ticket.estado}</span></td>
-                      <td>{new Date(ticket.fecha_creacion).toLocaleDateString()}</td>
                       <td>
                         <div className="d-flex justify-content-center gap-2">
-                          <select className="form-select form-select-sm" style={{ width: '110px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
-                            <option value="Abierto">Abierto</option>
-                            <option value="En Proceso">En Proceso</option>
-                            <option value="Resuelto">Resuelto</option>
-                          </select>
-                          <button className="btn btn-warning btn-sm text-white" title="Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
-                          <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
+                          
+                          {/* 4. REGLAS DE ACCESO (RBAC) */}
+                          
+                          {/* El select de Estado solo lo ven Técnicos y Admins */}
+                          {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                            <select className="form-select form-select-sm" style={{ width: '110px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
+                              <option value="Abierto">Abierto</option>
+                              <option value="En Proceso">En Proceso</option>
+                              <option value="Resuelto">Resuelto</option>
+                            </select>
+                          )}
+
+                          {/* Botón Asignarme: Solo Técnicos y Admins */}
+                          {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                            <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
+                          )}
+
+                          {/* Lápiz de Edición: Finales y Admins */}
+                          {(rolUsuario === 'final' || rolUsuario === 'admin') && (
+                            <button className="btn btn-warning btn-sm text-white" title="Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
+                          )}
+
+                          {/* Basurero: Estrictamente para Admins */}
+                          {rolUsuario === 'admin' && (
+                            <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
+                          )}
+                          
                         </div>
                       </td>
                     </tr>
@@ -303,56 +310,12 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
       </main>
 
-      {/* EL MODAL DE CREACIÓN / EDICIÓN QUEDA EXACTAMENTE IGUAL */}
+      {/* EL MODAL DE CREACIÓN / EDICIÓN QUEDA IGUAL (Lo omito aquí por brevedad, no olvides mantenerlo en tu código) */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{editandoId ? "Editar Ticket" : "Reportar Incidencia o Tarea"}</h5>
-                <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
-              </div>
-              
-              <form onSubmit={guardarTicket}>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label className="form-label">Asunto breve</label>
-                    <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required />
-                  </div>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Categoría</label>
-                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
-                        <option value="" disabled>Seleccione...</option>
-                        <option value="CCTV y Seguridad">CCTV y Seguridad</option>
-                        <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
-                        <option value="Redes">Redes</option>
-                        <option value="Hardware e Insumos">Hardware e Insumos</option>
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Prioridad</label>
-                      <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio}>
-                        <option value="Baja">Baja</option>
-                        <option value="Media">Media</option>
-                        <option value="Alta">Alta</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Descripción detallada</label>
-                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required></textarea>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-primary">{editandoId ? "Actualizar Cambios" : "Guardar Ticket"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+          {/* ... Todo tu código del modal original ... */}
         </div>
       )}
     </motion.div>
   )
-} 
+}
