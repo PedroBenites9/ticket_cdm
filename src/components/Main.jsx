@@ -219,10 +219,10 @@ export default function Main({ cambiarVista, usuario }) {
             📹 CCTV y Alarmas
           </button>
           <button 
-            className={`btn btn-sm ${filtroCategoria === 'Terminaciones' ? 'btn-warning' : 'btn-outline-warning'}`}
-            onClick={() => setFiltroCategoria('Terminaciones')}
+            className={`btn btn-sm ${filtroCategoria === 'Redes' ? 'btn-warning' : 'btn-outline-warning'}`}
+            onClick={() => setFiltroCategoria('Redes')}
           >
-            🧱 Terminaciones
+            🛜 Redes
           </button>
           <button 
             className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`}
@@ -349,4 +349,4 @@ export default function Main({ cambiarVista, usuario }) {
       )}
     </motion.div>
   )
-}
+} 
