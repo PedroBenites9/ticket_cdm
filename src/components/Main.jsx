@@ -320,7 +320,7 @@ export default function Main({ cambiarVista, usuario }) {
                         <option value="" disabled>Seleccione...</option>
                         <option value="CCTV y Seguridad">CCTV y Seguridad</option>
                         <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
-                        <option value="Terminaciones">Terminaciones en Obra</option>
+                        <option value="Redes">Redes</option>
                         <option value="Hardware e Insumos">Hardware e Insumos</option>
                       </select>
                     </div>
