@@ -114,10 +114,16 @@ export default function Main({ cambiarVista, usuario }) {
     const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
     if (confirmar) {
       try {
-        await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
+       const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
+        
+        // NUEVO: Si Render nos devuelve un error 500, lanzamos un error a propósito
+        if (!respuesta.ok) {
+          throw new Error("El servidor falló al borrar");
+        }
+
         const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
         setTickets(ticketsRestantes);
-        toast.error("Ticket eliminado del sistema."); 
+        toast.error("Ticket eliminado del sistema.");
       } catch (error) {
         toast.error("Error al intentar eliminar.");
       }
