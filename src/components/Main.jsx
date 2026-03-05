@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Main({ cambiarVista, usuario }) {
   const [tickets, setTickets] = useState([]);
@@ -156,6 +157,25 @@ export default function Main({ cambiarVista, usuario }) {
   const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
   const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
 
+  // Matemáticas para los Gráficos de Administrador
+  const datosEstado = [
+    { name: 'Abiertos', value: ticketsAbiertos },
+    { name: 'En Proceso', value: ticketsEnProceso },
+    { name: 'Resueltos', value: ticketsResueltos },
+  ];
+  // Colores de Bootstrap: Rojo, Amarillo, Verde
+  const COLORES_ESTADO = ['#dc3545', '#ffc107', '#198754']; 
+
+  // Agrupamos los tickets por categoría para el gráfico de barras
+  const conteoCategorias = tickets.reduce((acc, ticket) => {
+    acc[ticket.categoria] = (acc[ticket.categoria] || 0) + 1;
+    return acc;
+  }, {});
+  
+  const datosCategoria = Object.keys(conteoCategorias).map(key => ({
+    name: key,
+    cantidad: conteoCategorias[key]
+  }));
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
       <header className="navbar navbar-dark bg-dark shadow-sm">
@@ -222,6 +242,45 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
+            {/* NUEVO: GRÁFICOS ANALÍTICOS (Solo para Admin) */}
+          <div className="row mb-4">
+            {/* Gráfico de Torta: Estado de los Tickets */}
+            <div className="col-md-6 mb-3">
+              <div className="card shadow-sm h-100 border-0 p-3">
+                <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
+                <div style={{ height: '250px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={datosEstado} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                        {datosEstado.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORES_ESTADO[index % COLORES_ESTADO.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Gráfico de Barras: Tickets por Categoría */}
+            <div className="col-md-6 mb-3">
+              <div className="card shadow-sm h-100 border-0 p-3">
+                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría</h6>
+                <div style={{ height: '250px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                      <Tooltip />
+                      <Bar dataKey="cantidad" fill="#0d6efd" radius={[0, 5, 5, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
           </div>
         )}
 
@@ -314,6 +373,53 @@ export default function Main({ cambiarVista, usuario }) {
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           {/* ... Todo tu código del modal original ... */}
+          <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">{editandoId ? "Editar Ticket" : "Reportar Incidencia o Tarea"}</h5>
+                <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
+              </div>
+              
+              <form onSubmit={guardarTicket}>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label className="form-label">Asunto breve</label>
+                    <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required />
+                  </div>
+                  <div className="row">
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">Categoría</label>
+                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
+                        <option value="" disabled>Seleccione...</option>
+                        <option value="CCTV y Seguridad">CCTV y Seguridad</option>
+                        <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
+                        <option value="Terminaciones">Terminaciones en Obra</option>
+                        <option value="Hardware e Insumos">Hardware e Insumos</option>
+                      </select>
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">Prioridad</label>
+                      <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio}>
+                        <option value="Baja">Baja</option>
+                        <option value="Media">Media</option>
+                        <option value="Alta">Alta</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Descripción detallada</label>
+                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required></textarea>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">{editandoId ? "Actualizar Cambios" : "Guardar Ticket"}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
         </div>
       )}
     </motion.div>
