@@ -1,31 +1,32 @@
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner'; // 1. NUEVO: Importamos las notificaciones mágicas
-import { motion } from 'framer-motion'; 
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 
 export default function Main({ cambiarVista, usuario }) {
   const [tickets, setTickets] = useState([]);
-  
-  // 2. NUEVO: El estado de carga. Empieza en "true" porque al abrir la app, no tenemos los datos aún.
   const [cargando, setCargando] = useState(true); 
-  
   const [mostrarModal, setMostrarModal] = useState(false);
+  
+  // 1. NUEVO: Esta variable nos dice si estamos creando (null) o editando (ej: ID 5)
+  const [editandoId, setEditandoId] = useState(null); 
+
   const [busqueda, setBusqueda] = useState('');
   const [formulario, setFormulario] = useState({
     asunto: '', categoria: '', prioridad: 'Media', descripcion: ''
   });
 
+  // 2. NUEVO: Centralizamos tu URL para que el código quede súper limpio
+  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+
   useEffect(() => {
     const obtenerTickets = async () => {
       try {
-        const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/tickets');
+        const respuesta = await fetch(`${URL_API}/tickets`);
         const datosReales = await respuesta.json();
         setTickets(datosReales);
       } catch (error) {
-        console.error("Error:", error);
-        toast.error("Error al cargar los tickets desde la base de datos.");
+        toast.error("Error al cargar los tickets.");
       } finally {
-        // 3. NUEVO: El bloque "finally" se ejecuta SIEMPRE al final, haya error o éxito.
-        // Aquí apagamos el esqueleto de carga.
         setCargando(false);
       }
     };
@@ -43,30 +44,65 @@ export default function Main({ cambiarVista, usuario }) {
     setFormulario({ ...formulario, [e.target.name]: e.target.value });
   };
 
+  // 3. NUEVO: Abrir modal totalmente en blanco (Crear)
+  const abrirModalCrear = () => {
+    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '' });
+    setEditandoId(null);
+    setMostrarModal(true);
+  };
+
+  // 4. NUEVO: Abrir modal y rellenarlo con los datos del ticket tocado (Editar)
+  const abrirModalEditar = (ticket) => {
+    setFormulario({
+      asunto: ticket.asunto,
+      categoria: ticket.categoria,
+      prioridad: ticket.prioridad,
+      descripcion: ticket.descripcion
+    });
+    setEditandoId(ticket.id); // Le decimos a React: "Ojo, estamos editando este ticket"
+    setMostrarModal(true);
+  };
+
+  // 5. MODIFICADO: Esta función ahora sirve para ambas cosas
   const guardarTicket = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formulario)
-      });
-      const ticketCreado = await respuesta.json();
+      if (editandoId) {
+        // --- MODO EDICIÓN ---
+        const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formulario)
+        });
+        const ticketActualizado = await respuesta.json();
+        
+        // Buscamos el viejo en la tabla y lo reemplazamos por el actualizado
+        const ticketsNuevos = tickets.map(t => t.id === editandoId ? ticketActualizado : t);
+        setTickets(ticketsNuevos);
+        toast.success("¡Ticket actualizado correctamente!");
+
+      } else {
+        // --- MODO CREACIÓN ---
+        const respuesta = await fetch(`${URL_API}/tickets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formulario)
+        });
+        const ticketCreado = await respuesta.json();
+        
+        setTickets([ticketCreado, ...tickets]);
+        toast.success("¡Ticket generado correctamente!"); 
+      }
       
-      setTickets([ticketCreado, ...tickets]);
       setMostrarModal(false);
-      setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '' });
-      
-      // 4. NUEVO: Notificación de éxito al crear
-      toast.success("¡Ticket generado correctamente!"); 
     } catch (error) {
-      toast.error("Hubo un problema al crear el ticket.");
+      toast.error("Hubo un problema al procesar el ticket.");
     }
   };
 
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {
-      await fetch(`https://back-tickets-u01r.onrender.com/api/tickets/${idTabla}`, {
+      await fetch(`${URL_API}/tickets/${idTabla}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
@@ -77,8 +113,6 @@ export default function Main({ cambiarVista, usuario }) {
         return ticket;
       });
       setTickets(ticketsActualizados);
-      
-      // Notificación de éxito al actualizar
       toast.success("Estado actualizado a: " + nuevoEstado);
     } catch (error) {
       toast.error("Error al cambiar el estado.");
@@ -89,12 +123,10 @@ export default function Main({ cambiarVista, usuario }) {
     const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
     if (confirmar) {
       try {
-        await fetch(`https://back-tickets-u01r.onrender.com/api/tickets/${idTabla}`, { method: 'DELETE' });
+        await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
         const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
         setTickets(ticketsRestantes);
-        
-        // Notificación de éxito al borrar
-        toast.error("Ticket eliminado del sistema."); // Usamos .error para que salga rojo (como advertencia de borrado)
+        toast.error("Ticket eliminado del sistema."); 
       } catch (error) {
         toast.error("Error al intentar eliminar.");
       }
@@ -102,20 +134,18 @@ export default function Main({ cambiarVista, usuario }) {
   };
 
   const ticketsFiltrados = tickets.filter((ticket) => 
-  {
-
     ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
     ticket.codigo.toLowerCase().includes(busqueda.toLowerCase())
-  }
   );
-      // Cálculos para el Panel de Estadísticas
+
+  // Cálculos para el Panel de Estadísticas
   const totalTickets = tickets.length;
   const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
   const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
   const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
       <header className="navbar navbar-dark bg-dark shadow-sm">
         <div className="container">
           <span className="navbar-brand">
@@ -127,7 +157,7 @@ export default function Main({ cambiarVista, usuario }) {
             </span>
             <button className="btn btn-outline-light btn-sm" onClick={() => {
               localStorage.removeItem('token_acceso'); 
-              localStorage.removeItem('nombre_usuario'); // <-- NUEVO: Limpiamos el nombre
+              localStorage.removeItem('nombre_usuario');
               cambiarVista('login');
             }}>
               Cerrar Sesión
@@ -139,10 +169,12 @@ export default function Main({ cambiarVista, usuario }) {
       <main className="container mt-5">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h2 className="h3 text-secondary">Mis Incidencias</h2>
-          <button className="btn btn-primary" onClick={() => setMostrarModal(true)}>
+          {/* Cambiamos la función del botón de crear */}
+          <button className="btn btn-primary" onClick={abrirModalCrear}>
             + Nuevo Ticket
           </button>
         </div>
+
         {/* PANEL DE ESTADÍSTICAS */}
         <div className="row mb-4">
           <div className="col-md-3 col-6 mb-3">
@@ -198,10 +230,7 @@ export default function Main({ cambiarVista, usuario }) {
                 </tr>
               </thead>
               <tbody>
-                
-                {/* 5. NUEVO: Lógica del Skeleton Loader */}
                 {cargando ? (
-                  // Si está cargando, dibujamos 3 filas de mentira con la clase "placeholder-glow" de Bootstrap
                   Array.from({ length: 3 }).map((_, index) => (
                     <tr key={index} className="placeholder-glow">
                       <td><span className="placeholder col-8 bg-secondary"></span></td>
@@ -214,7 +243,6 @@ export default function Main({ cambiarVista, usuario }) {
                     </tr>
                   ))
                 ) : ticketsFiltrados.length > 0 ? (
-                  // Si NO está cargando y HAY tickets, los mostramos
                   ticketsFiltrados.map((ticket) => (
                     <tr key={ticket.id}>
                       <td className="fw-bold">{ticket.codigo}</td>
@@ -230,30 +258,34 @@ export default function Main({ cambiarVista, usuario }) {
                             <option value="En Proceso">En Proceso</option>
                             <option value="Resuelto">Resuelto</option>
                           </select>
+                          
+                          {/* 6. NUEVO: El botón del Lápiz */}
+                          <button className="btn btn-warning btn-sm text-white" title="Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
+                          
                           <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
                         </div>
                       </td>
                     </tr>
                   ))
                 ) : (
-                  // Si NO está cargando y NO hay tickets, mostramos el mensaje vacío
                   <tr>
                     <td colSpan="7" className="text-muted py-3">No hay tickets registrados.</td>
                   </tr>
                 )}
-                
               </tbody>
             </table>
           </div>
         </div>
       </main>
 
+      {/* EL MODAL DE CREACIÓN / EDICIÓN */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Reportar Incidencia o Tarea</h5>
+                {/* Cambiamos el título dependiendo del modo */}
+                <h5 className="modal-title">{editandoId ? "Editar Ticket" : "Reportar Incidencia o Tarea"}</h5>
                 <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
               </div>
               
@@ -265,13 +297,12 @@ export default function Main({ cambiarVista, usuario }) {
                   </div>
                   <div className="row">
                     <div className="col-md-6 mb-3">
-                      {/* 6. NUEVO: Categorías adaptadas al mundo real */}
                       <label className="form-label">Categoría</label>
                       <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
                         <option value="" disabled>Seleccione...</option>
                         <option value="CCTV y Seguridad">CCTV y Seguridad</option>
                         <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
-                        <option value="Terminaciones">Terminaciones en Obra</option>
+                        <option value="Terminaciones">Redes</option>
                         <option value="Hardware e Insumos">Hardware e Insumos</option>
                       </select>
                     </div>
@@ -291,7 +322,8 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-primary">Guardar Ticket</button>
+                  {/* Cambiamos el texto del botón dependiendo del modo */}
+                  <button type="submit" className="btn btn-primary">{editandoId ? "Actualizar Cambios" : "Guardar Ticket"}</button>
                 </div>
               </form>
             </div>
