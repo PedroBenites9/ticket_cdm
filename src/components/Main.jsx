@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -11,13 +12,39 @@ export default function Main({ cambiarVista, usuario }) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
 
+  // ==========================================
+  // NUEVO (BITÁCORA): Estados para los comentarios
+  // ==========================================
+  const [comentarios, setComentarios] = useState([]);
+  const [nuevoComentario, setNuevoComentario] = useState('');
+// ==========================================
+  // MAGIA DEL CHAT: Referencia y Tiempo Real
+  // ==========================================
+  const finalDelChatRef = useRef(null); // Apuntador para el auto-scroll
+
+  // Efecto 1: Bajar el scroll automáticamente cuando hay nuevos comentarios
+  useEffect(() => {
+    if (finalDelChatRef.current) {
+      finalDelChatRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comentarios]); // Se ejecuta cada vez que la lista de comentarios cambia
+
+  // Efecto 2: "Polling" (preguntar al servidor cada 3 segundos si hay mensajes nuevos de otros)
+  useEffect(() => {
+    let intervalo;
+    if (editandoId) {
+      intervalo = setInterval(() => {
+        cargarComentarios(editandoId);
+      }, 3000); // 3000 milisegundos = 3 segundos
+    }
+    // Cuando cierras el modal, apagamos el motor para no gastar internet
+    return () => clearInterval(intervalo); 
+  }, [editandoId]);
   const [formulario, setFormulario] = useState({
     asunto: '', categoria: '', prioridad: 'Media', descripcion: ''
   });
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  
-  // 1. NUEVO: Leemos el rol del usuario (si no hay, por seguridad es "final")
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   useEffect(() => {
@@ -49,7 +76,21 @@ export default function Main({ cambiarVista, usuario }) {
   const abrirModalCrear = () => {
     setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '' });
     setEditandoId(null);
+    setComentarios([]); // Limpiamos comentarios al crear uno nuevo
     setMostrarModal(true);
+  };
+
+  // ==========================================
+  // NUEVO (BITÁCORA): Cargar comentarios al abrir el ticket
+  // ==========================================
+  const cargarComentarios = async (idTicket) => {
+    try {
+      const respuesta = await fetch(`${URL_API}/tickets/${idTicket}/comentarios`);
+      const datos = await respuesta.json();
+      setComentarios(datos);
+    } catch (error) {
+      console.error("Error al cargar comentarios", error);
+    }
   };
 
   const abrirModalEditar = (ticket) => {
@@ -60,7 +101,28 @@ export default function Main({ cambiarVista, usuario }) {
       descripcion: ticket.descripcion
     });
     setEditandoId(ticket.id);
+    cargarComentarios(ticket.id); // Pedimos al servidor el historial
+    setNuevoComentario('');
     setMostrarModal(true);
+  };
+
+  // ==========================================
+  // NUEVO (BITÁCORA): Función para enviar una nota
+  // ==========================================
+  const enviarComentario = async () => {
+    if (!nuevoComentario.trim()) return; // No enviar si está vacío
+    try {
+      const respuesta = await fetch(`${URL_API}/tickets/${editandoId}/comentarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autor: usuario, texto: nuevoComentario })
+      });
+      const comentarioCreado = await respuesta.json();
+      setComentarios([...comentarios, comentarioCreado]); // Lo agregamos a la pantalla al instante
+      setNuevoComentario(''); // Limpiamos la caja de texto
+    } catch (error) {
+      toast.error("Error al guardar la nota.");
+    }
   };
 
   const guardarTicket = async (e) => {
@@ -110,10 +172,8 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
-  // 2. NUEVO: Función para que el técnico se asigne el ticket
   const asignarmeTicket = async (idTabla) => {
     try {
-      // Nota: Esta ruta la crearemos en el Backend en el próximo paso
       await fetch(`${URL_API}/tickets/asignar/${idTabla}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -157,16 +217,13 @@ export default function Main({ cambiarVista, usuario }) {
   const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
   const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
 
-  // Matemáticas para los Gráficos de Administrador
   const datosEstado = [
     { name: 'Abiertos', value: ticketsAbiertos },
     { name: 'En Proceso', value: ticketsEnProceso },
     { name: 'Resueltos', value: ticketsResueltos },
   ];
-  // Colores de Bootstrap: Rojo, Amarillo, Verde
   const COLORES_ESTADO = ['#dc3545', '#ffc107', '#198754']; 
 
-  // Agrupamos los tickets por categoría para el gráfico de barras
   const conteoCategorias = tickets.reduce((acc, ticket) => {
     acc[ticket.categoria] = (acc[ticket.categoria] || 0) + 1;
     return acc;
@@ -176,6 +233,7 @@ export default function Main({ cambiarVista, usuario }) {
     name: key,
     cantidad: conteoCategorias[key]
   }));
+
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
       <header className="navbar navbar-dark bg-dark shadow-sm">
@@ -190,7 +248,7 @@ export default function Main({ cambiarVista, usuario }) {
             <button className="btn btn-outline-light btn-sm" onClick={() => {
               localStorage.removeItem('token_acceso'); 
               localStorage.removeItem('nombre_usuario');
-              localStorage.removeItem('rol_usuario'); // Limpiamos el rol al salir
+              localStorage.removeItem('rol_usuario');
               cambiarVista('login');
             }}>
               Salir
@@ -207,7 +265,6 @@ export default function Main({ cambiarVista, usuario }) {
           </button>
         </div>
 
-        {/* 3. NUEVO: Solo el Administrador ve las tarjetas de conteo */}
         {rolUsuario === 'admin' && (
           <div className="row mb-4">
             <div className="col-md-3 col-6 mb-3">
@@ -242,9 +299,11 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
-            {/* NUEVO: GRÁFICOS ANALÍTICOS (Solo para Admin) */}
+          </div>
+        )}
+
+        {rolUsuario === 'admin' && (
           <div className="row mb-4">
-            {/* Gráfico de Torta: Estado de los Tickets */}
             <div className="col-md-6 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
@@ -263,8 +322,6 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
-
-            {/* Gráfico de Barras: Tickets por Categoría */}
             <div className="col-md-6 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría</h6>
@@ -280,7 +337,6 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
-          </div>
           </div>
         )}
 
@@ -304,7 +360,6 @@ export default function Main({ cambiarVista, usuario }) {
                   <th>Asunto</th>
                   <th>Categoría</th>
                   <th>Prioridad</th>
-                  {/* Nueva columna */}
                   <th>Técnico Asignado</th> 
                   <th>Estado</th>
                   <th>Acciones</th> 
@@ -320,17 +375,10 @@ export default function Main({ cambiarVista, usuario }) {
                       <td>{ticket.asunto}</td>
                       <td>{ticket.categoria}</td>
                       <td>{ticket.prioridad}</td>
-                      
-                      {/* Mostramos quién es el técnico */}
                       <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
-                      
                       <td><span className={`badge ${obtenerColorEstado(ticket.estado)}`}>{ticket.estado}</span></td>
                       <td>
                         <div className="d-flex justify-content-center gap-2">
-                          
-                          {/* 4. REGLAS DE ACCESO (RBAC) */}
-                          
-                          {/* El select de Estado solo lo ven Técnicos y Admins */}
                           {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
                             <select className="form-select form-select-sm" style={{ width: '110px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
                               <option value="Abierto">Abierto</option>
@@ -338,22 +386,15 @@ export default function Main({ cambiarVista, usuario }) {
                               <option value="Resuelto">Resuelto</option>
                             </select>
                           )}
-
-                          {/* Botón Asignarme: Solo Técnicos y Admins */}
                           {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
                             <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
                           )}
-
-                          {/* Lápiz de Edición: Finales y Admins */}
-                          {(rolUsuario === 'final' || rolUsuario === 'admin') && (
-                            <button className="btn btn-warning btn-sm text-white" title="Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
+                          {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                            <button className="btn btn-warning btn-sm text-white" title="Abrir y Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
                           )}
-
-                          {/* Basurero: Estrictamente para Admins */}
                           {rolUsuario === 'admin' && (
                             <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
                           )}
-                          
                         </div>
                       </td>
                     </tr>
@@ -369,27 +410,28 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
       </main>
 
-      {/* EL MODAL DE CREACIÓN / EDICIÓN QUEDA IGUAL (Lo omito aquí por brevedad, no olvides mantenerlo en tu código) */}
+      {/* EL MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          {/* ... Todo tu código del modal original ... */}
-          <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog">
+          <div className="modal-dialog modal-lg"> {/* modal-lg para hacerlo más ancho */}
             <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{editandoId ? "Editar Ticket" : "Reportar Incidencia o Tarea"}</h5>
+              <div className="modal-header bg-light">
+                <h5 className="modal-title fw-bold text-secondary">
+                  {editandoId ? "Detalles y Bitácora del Ticket" : "Reportar Incidencia o Tarea"}
+                </h5>
                 <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
               </div>
               
-              <form onSubmit={guardarTicket}>
-                <div className="modal-body">
+              <div className="modal-body">
+                {/* Formulario principal del ticket. Nota el id="formTicket" */}
+                <form id="formTicket" onSubmit={guardarTicket}>
                   <div className="mb-3">
-                    <label className="form-label">Asunto breve</label>
+                    <label className="form-label fw-bold">Asunto breve</label>
                     <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required />
                   </div>
                   <div className="row">
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">Categoría</label>
+                      <label className="form-label fw-bold">Categoría</label>
                       <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
                         <option value="" disabled>Seleccione...</option>
                         <option value="CCTV y Seguridad">CCTV y Seguridad</option>
@@ -399,7 +441,7 @@ export default function Main({ cambiarVista, usuario }) {
                       </select>
                     </div>
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">Prioridad</label>
+                      <label className="form-label fw-bold">Prioridad</label>
                       <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio}>
                         <option value="Baja">Baja</option>
                         <option value="Media">Media</option>
@@ -408,18 +450,68 @@ export default function Main({ cambiarVista, usuario }) {
                     </div>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Descripción detallada</label>
+                    <label className="form-label fw-bold">Descripción detallada</label>
                     <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required></textarea>
                   </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-primary">{editandoId ? "Actualizar Cambios" : "Guardar Ticket"}</button>
-                </div>
-              </form>
+                </form>
+
+                {/* ========================================== */}
+                {/* NUEVO (BITÁCORA): Renderizado del Historial */}
+                {/* ========================================== */}
+                {editandoId && (
+                  <div className="mt-4 pt-4 border-top">
+                    <h6 className="fw-bold text-secondary mb-3">💬 Bitácora de procesos</h6>
+                    
+                  {/* Caja con scroll para los comentarios */}
+                    <div className="bg-light p-3 rounded mb-3 border" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {comentarios.length > 0 ? (
+                        comentarios.map((c) => (
+                          <div key={c.id} className="mb-3 pb-2 border-bottom">
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                              <span className="fw-bold text-primary small">{c.autor}</span>
+                              <span className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                {new Date(c.fecha).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="text-dark small">{c.texto}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-muted small text-center mb-0 fst-italic">No hay notas registradas en este ticket.</p>
+                      )}
+                      
+                      {/* NUEVO: El ancla invisible al final del chat */}
+                      <div ref={finalDelChatRef} />
+                      
+                    </div>
+
+                    {/* Input para agregar un nuevo comentario */}
+                    <div className="d-flex gap-2">
+                      <input 
+                        type="text" 
+                        className="form-control form-control-sm" 
+                        placeholder="Escribir una actualización o repuesto necesario..." 
+                        value={nuevoComentario} 
+                        onChange={(e) => setNuevoComentario(e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} 
+                      />
+                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario}>
+                        Enviar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="modal-footer bg-light">
+                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
+                {/* Vinculamos este botón al id="formTicket" que está arriba */}
+                <button type="submit" form="formTicket" className="btn btn-success">
+                  {editandoId ? "Actualizar Datos del Ticket" : "Generar Ticket Nuevo"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         </div>
       )}
     </motion.div>
