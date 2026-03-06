@@ -28,7 +28,9 @@ export default function Main({ cambiarVista, usuario }) {
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
-
+// NUEVO: Identificamos si el ticket abierto está bloqueado
+  const ticketAbierto = tickets.find(t => t.id === editandoId);
+  const esSoloLectura = ticketAbierto?.estado === 'Cerrado Definitivo';
   useEffect(() => {
     const obtenerTickets = async () => {
       try {
@@ -505,9 +507,16 @@ export default function Main({ cambiarVista, usuario }) {
                       {/* 7. Acciones */}
                       <td>
                         {ticket.estado === 'Cerrado Definitivo' ? (
-                          <span className="badge bg-light text-dark border p-2">🔒 Archivado</span>
+                         <div className="d-flex justify-content-center align-items-center gap-2">
+                            <span className="badge bg-light text-dark border p-2">🔒 Archivado</span>
+                            {/* NUEVO: Botón para ver el ticket bloqueado */}
+                            <button className="btn btn-secondary btn-sm text-white shadow-sm" title="Ver Historial" onClick={() => abrirModalEditar(ticket)}>
+                              👁️ Ver
+                            </button>
+                          </div>
                         ) : (
                           <div className="d-flex justify-content-center align-items-center gap-1">
+                            {/* ... (Aquí siguen tus otros botones que ya tenías: el select, asignarme, editar, eliminar) ... */}
                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
                               <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
                                 <option value="Abierto">Abierto</option>
@@ -556,14 +565,14 @@ export default function Main({ cambiarVista, usuario }) {
                 <form id="formTicket" onSubmit={guardarTicket}>
                   <div className="mb-3">
                     <label className="form-label fw-bold">Asunto breve (Ej: PC sin internet)</label>
-                    <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required />
+                    <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required disabled={esSoloLectura}/>
                   </div>
                   <div className="row">
                     
                     {/* NUEVO: Selector de Origen (Interno/Externo) */}
                     <div className="col-md-4 mb-3">
                       <label className="form-label fw-bold">Origen / Cliente</label>
-                      <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen} onChange={manejarCambio} required>
+                      <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen} onChange={manejarCambio} required disabled={esSoloLectura}>
                         <option value="Interno">🏢 Personal Interno</option>
                         <option value="Externo">🤝 Cliente Externo</option>
                       </select>
@@ -571,7 +580,7 @@ export default function Main({ cambiarVista, usuario }) {
 
                     <div className="col-md-5 mb-3">
                       <label className="form-label fw-bold">Categoría IT</label>
-                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
+                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required disabled={esSoloLectura}>
                         <option value="" disabled>Seleccione...</option>
                         <option value="Redes e Internet">Redes e Internet</option>
                         <option value="Active Directory / Accesos">Active Directory / Accesos</option>
@@ -583,7 +592,7 @@ export default function Main({ cambiarVista, usuario }) {
 
                     <div className="col-md-3 mb-3">
                       <label className="form-label fw-bold">Prioridad</label>
-                      <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio}>
+                      <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio} disabled={esSoloLectura}>
                         <option value="Baja">Baja</option>
                         <option value="Media">Media</option>
                         <option value="Alta">Alta</option>
@@ -593,7 +602,7 @@ export default function Main({ cambiarVista, usuario }) {
                   </div>
                   <div className="mb-3">
                     <label className="form-label fw-bold">Descripción detallada</label>
-                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} placeholder="Explique el problema con el mayor detalle posible..." required></textarea>
+                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} placeholder="Explique el problema con el mayor detalle posible..." required disabled={esSoloLectura}></textarea>
                   </div>
                 </form>
 
@@ -620,15 +629,15 @@ export default function Main({ cambiarVista, usuario }) {
                       <div ref={finalDelChatRef} />
                     </div>
                     <div className="d-flex gap-2">
-                      <input type="text" className="form-control form-control-sm" placeholder="Registrar una actualización del caso..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} />
-                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario}>Enviar</button>
+                      <input type="text" className="form-control form-control-sm" placeholder="Registrar una actualización del caso..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} disabled={esSoloLectura}/>
+                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario} disabled={esSoloLectura}>Enviar</button>
                     </div>
                   </div>
                 )}
               </div>
               <div className="modal-footer bg-light">
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
-                <button type="submit" form="formTicket" className="btn btn-success">
+                <button type="submit" form="formTicket" className="btn btn-success"disabled={esSoloLectura}>
                   {editandoId ? "Actualizar Ticket" : "Generar Nuevo Ticket"}
                 </button>
               </div>
