@@ -77,7 +77,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
             <div className="card shadow-lg p-4 border-0 rounded-3">
                {/* 2. NUEVO: La Imagen del Logo Centrada */}
               <img 
-                src={logo} // <--- ¡REEMPLAZA ESTO!
+                src={logo} 
                 alt="Logo de la empresa" 
                 className="d-block mx-auto mb-4 img-fluid" // Clases Bootstrap para centrar
                 style={{ maxWidth: '320px', height: 'auto' }} // Controla que no sea gigante

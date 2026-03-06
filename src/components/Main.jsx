@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-
+import logo from '../assets/CDMlogo(blanco).svg';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -61,7 +61,38 @@ export default function Main({ cambiarVista, usuario }) {
     };
     obtenerTickets();
   }, []);
+// ==========================================
+  // ESTADOS Y FUNCIONES PARA GESTIÓN DE USUARIOS
+  // ==========================================
+  const [usuariosLista, setUsuariosLista] = useState([]);
+  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
 
+  const abrirPanelUsuarios = async () => {
+    try {
+      const respuesta = await fetch(`${URL_API}/usuarios`);
+      const datos = await respuesta.json();
+      setUsuariosLista(datos);
+      setMostrarModalUsuarios(true); // Abrimos la ventanita
+    } catch (error) {
+      toast.error("Error al cargar los usuarios.");
+    }
+  };
+
+  const cambiarRolUsuario = async (idUsuario, nuevoRol) => {
+    try {
+      await fetch(`${URL_API}/usuarios/${idUsuario}/rol`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rol: nuevoRol })
+      });
+      
+      // Actualizamos la tabla de la pantalla al instante
+      setUsuariosLista(usuariosLista.map(u => u.id === idUsuario ? { ...u, rol: nuevoRol } : u));
+      toast.success("Rol de usuario actualizado.");
+    } catch (error) {
+      toast.error("Error al cambiar el rol.");
+    }
+  };
   const obtenerColorEstado = (estado) => {
     if (estado === 'Abierto') return 'bg-danger';
     if (estado === 'En Proceso') return 'bg-warning text-dark';
@@ -236,15 +267,36 @@ export default function Main({ cambiarVista, usuario }) {
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-      <header className="navbar navbar-dark bg-dark shadow-sm">
+   <header className="navbar navbar-dark bg-dark shadow-sm position-relative">
         <div className="container">
-          <span className="navbar-brand">
-            <strong>🔧 Gestión de Obras</strong>
+          
+          {/* IZQUIERDA: Solo el Logo */}
+          <span className="navbar-brand mb-0">
+            <img 
+              src={logo} 
+              alt="Logo Cruz de Malta" 
+              className="img-fluid rounded" 
+              style={{ height: '40px', width: 'auto' }}
+            />
           </span>
+
+          {/* CENTRO PERFECTO: El Título */}
+          <div className="position-absolute start-50 translate-middle-x text-white d-none d-sm-block">
+            <h5 className="mb-0 fw-bold tracking-wide">Sistema de Tickets</h5>
+          </div>
+          
+          {/* DERECHA: Menú de Usuario y Botones */}
           <div className="d-flex align-items-center gap-3">
             <span className="text-light d-none d-md-inline">
               Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
             </span>
+            
+            {rolUsuario === 'admin' && (
+              <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
+                👥 Usuarios
+              </button>
+            )}
+            
             <button className="btn btn-outline-light btn-sm" onClick={() => {
               localStorage.removeItem('token_acceso'); 
               localStorage.removeItem('nombre_usuario');
@@ -255,7 +307,7 @@ export default function Main({ cambiarVista, usuario }) {
             </button>
           </div>
         </div>
-      </header>
+      </header>   
 
       <main className="container mt-5">
         <div className="d-flex justify-content-between align-items-center mb-4">
@@ -509,6 +561,64 @@ export default function Main({ cambiarVista, usuario }) {
                 <button type="submit" form="formTicket" className="btn btn-success">
                   {editandoId ? "Actualizar Datos del Ticket" : "Generar Ticket Nuevo"}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ========================================== */}
+      {/* MODAL DE GESTIÓN DE USUARIOS (SOLO ADMIN)  */}
+      {/* ========================================== */}
+      {mostrarModalUsuarios && rolUsuario === 'admin' && (
+        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content border-0 shadow-lg">
+              <div className="modal-header bg-dark text-white">
+                <h5 className="modal-title fw-bold">👥 Gestión de Permisos y Roles</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setMostrarModalUsuarios(false)}></button>
+              </div>
+              
+              <div className="modal-body p-0">
+                <table className="table table-hover mb-0 text-center align-middle">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Email</th>
+                      <th>Rol Actual</th>
+                      <th>Cambiar Rol a...</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usuariosLista.map((u) => (
+                      <tr key={u.id}>
+                        <td className="fw-bold">{u.nombre}</td>
+                        <td className="text-muted">{u.email}</td>
+                        <td>
+                          <span className={`badge ${u.rol === 'admin' ? 'bg-danger' : u.rol === 'tecnico' ? 'bg-primary' : 'bg-secondary'}`}>
+                            {u.rol.toUpperCase()}
+                          </span>
+                        </td>
+                        <td>
+                          {/* El select que permite cambiar el rol */}
+                          <select 
+                            className="form-select form-select-sm mx-auto" 
+                            style={{ width: '130px' }} 
+                            value={u.rol} 
+                            onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}
+                          >
+                            <option value="final">Usuario Final</option>
+                            <option value="tecnico">Técnico</option>
+                            <option value="admin">Administrador</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="modal-footer bg-light">
+                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalUsuarios(false)}>Cerrar Panel</button>
               </div>
             </div>
           </div>
