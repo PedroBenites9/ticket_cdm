@@ -6,13 +6,15 @@ import logo from '../assets/logo.png';
 import * as XLSX from 'xlsx';
 
 export default function Main({ cambiarVista, usuario }) {
+  // ==========================================
+  // ESTADOS PARA TICKETS
+  // ==========================================
   const [tickets, setTickets] = useState([]);
   const [cargando, setCargando] = useState(true); 
   const [mostrarModal, setMostrarModal] = useState(false);
   const [editandoId, setEditandoId] = useState(null); 
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
-
   const [comentarios, setComentarios] = useState([]);
   const [nuevoComentario, setNuevoComentario] = useState('');
   const finalDelChatRef = useRef(null);
@@ -25,6 +27,15 @@ export default function Main({ cambiarVista, usuario }) {
   const [formulario, setFormulario] = useState({
     asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno'
   });
+  // ==========================================
+  // ESTADOS PARA RUTINAS DIARIAS (Mantenimiento)
+  // ==========================================
+  const [pestañaActual, setPestañaActual] = useState('tickets'); // Controla si vemos 'tickets' o 'tareas'
+  const [tareas, setTareas] = useState([]);
+  const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
+  const [formularioTarea, setFormularioTarea] = useState({
+    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00'
+  });
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
@@ -32,18 +43,24 @@ export default function Main({ cambiarVista, usuario }) {
   const ticketAbierto = tickets.find(t => t.id === editandoId);
   const esSoloLectura = ticketAbierto?.estado === 'Cerrado Definitivo';
   useEffect(() => {
-    const obtenerTickets = async () => {
+   const obtenerDatos = async () => {
       try {
-        const respuesta = await fetch(`${URL_API}/tickets`);
-        const datosReales = await respuesta.json();
-        setTickets(datosReales);
+        // 1. Cargar Tickets
+        const respuestaTickets = await fetch(`${URL_API}/tickets`);
+        setTickets(await respuestaTickets.json());
+
+        // 2. Cargar Tareas
+        const respuestaTareas = await fetch(`${URL_API}/tareas`);
+        const datosTareas = await respuestaTareas.json();
+        setTareas(datosTareas);
+
       } catch (error) {
-        toast.error("Error al cargar los tickets.");
+        toast.error("Error al cargar los datos del servidor.");
       } finally {
         setCargando(false);
       }
     };
-    obtenerTickets();
+    obtenerDatos();
   }, []);
 
   useEffect(() => {
@@ -244,6 +261,37 @@ export default function Main({ cambiarVista, usuario }) {
     XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
     toast.success("¡Reporte de Excel descargado con éxito!");
   };
+  // ==========================================
+  // NUEVO: Exportar Historial de Tareas a Excel
+  // ==========================================
+  const exportarHistorialTareas = async () => {
+    try {
+      const respuesta = await fetch(`${URL_API}/tareas/historial`);
+      const datosHistorial = await respuesta.json();
+
+      if (datosHistorial.length === 0) {
+        toast.error("Aún no hay tareas completadas para exportar.");
+        return;
+      }
+
+      const datosParaExcel = datosHistorial.map(registro => ({
+        "ID Tarea": registro.tarea_id,
+        "Rutina Realizada": registro.titulo_tarea,
+        "Completado Por": registro.usuario_que_completo,
+        "Fecha Exacta": new Date(registro.fecha_completada).toLocaleDateString(),
+        "Hora Exacta": new Date(registro.fecha_completada).toLocaleTimeString()
+      }));
+
+      const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Métricas de Rutinas");
+      XLSX.writeFile(libro, "Métricas_Mantenimiento_CruzDeMalta.xlsx");
+      
+      toast.success("¡Reporte de métricas descargado!");
+    } catch (error) {
+      toast.error("Error al generar el Excel de tareas.");
+    }
+  };
 
   const abrirPanelUsuarios = async () => {
     try {
@@ -298,10 +346,81 @@ export default function Main({ cambiarVista, usuario }) {
     name: key,
     cantidad: conteoCategorias[key]
   }));
+  // ==========================================
+  // FUNCIONES DE RUTINAS DIARIAS
+  // ==========================================
+  const guardarTarea = async (e) => {
+    e.preventDefault();
+    try {
+      // Magia: Calcular la próxima ejecución basándose en la hora
+      const ahora = new Date();
+      const [horas, minutos] = formularioTarea.hora_programada.split(':');
+      let proxima = new Date();
+      proxima.setHours(horas, minutos, 0, 0);
+      
+      // Si la hora límite ya pasó hoy, se programa directamente para mañana
+      if (proxima <= ahora) {
+        proxima.setDate(proxima.getDate() + 1);
+      }
+
+      const respuesta = await fetch(`${URL_API}/tareas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formularioTarea, proxima_ejecucion: proxima.toISOString() })
+      });
+      
+      const tareaCreada = await respuesta.json();
+      setTareas([...tareas, tareaCreada].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion)));
+      setMostrarModalTarea(false);
+      toast.success("¡Rutina programada con éxito!");
+    } catch (error) {
+      toast.error("Error al crear la rutina.");
+    }
+  };
+
+  const marcarTareaCompletada = async (id) => {
+    try {
+      // NUEVO: Enviamos el usuario en el body
+      const respuesta = await fetch(`${URL_API}/tareas/${id}/completar`, { 
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: usuario }) 
+      });
+      const tareaActualizada = await respuesta.json();
+      
+      const nuevasTareas = tareas.map(t => t.id === id ? tareaActualizada : t);
+      nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
+      
+      setTareas(nuevasTareas);
+      toast.success("¡Excelente! Tarea completada. Quedó reprogramada para mañana.");
+    } catch (error) {
+      toast.error("Error al actualizar la rutina.");
+    }
+  };
+  const calcularTiempoTarea = (fechaFutura) => {
+    if (!fechaFutura) return "";
+    const difMs = new Date(fechaFutura) - new Date();
+    if (difMs <= 0) return "⚠️ Atrasada"; // Si se te pasó la hora
+    
+    const horas = Math.floor(difMs / (1000 * 60 * 60));
+    const minutos = Math.floor((difMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (horas >= 24) return `Mañana a las ${new Date(fechaFutura).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    return `Faltan ${horas}h ${minutos}m`;
+  };
+  // NUEVO: Función para saber si la tarea ya se hizo en el día actual
+  const fueCompletadaHoy = (fechaString) => {
+    if (!fechaString) return false;
+    const fechaCompletada = new Date(fechaString);
+    const hoy = new Date();
+    return fechaCompletada.getDate() === hoy.getDate() &&
+           fechaCompletada.getMonth() === hoy.getMonth() &&
+           fechaCompletada.getFullYear() === hoy.getFullYear();
+  };
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-   <header className="navbar navbar-dark bg-dark shadow-sm position-relative">
+      <header className="navbar navbar-dark bg-dark shadow-sm position-relative">
         <div className="container">
           
           {/* IZQUIERDA: Solo el Logo */}
@@ -342,7 +461,26 @@ export default function Main({ cambiarVista, usuario }) {
       </header>
 
       <main className="container mt-5">
-        <div className="d-flex justify-content-between align-items-center mb-4">
+        {/* LAS PESTAÑAS DE NAVEGACIÓN */}
+        <ul className="nav nav-tabs mb-4 border-bottom-0 gap-1">
+          <li className="nav-item">
+            <button className={`nav-link text-dark ${pestañaActual === 'tickets' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} onClick={() => setPestañaActual('tickets')}>
+              🎫 Soporte IT
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link text-dark ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} onClick={() => setPestañaActual('tareas')}>
+              🔄 Mantenimiento y Rutinas
+            </button>
+          </li>
+        </ul>
+        {/* ==================================================== */}
+        {/* VISTA 1: TUS TICKETS DE SIEMPRE                        */}
+        {/* ==================================================== */}
+        {pestañaActual === 'tickets' && (
+          <div className="animate__animated animate__fadeIn">
+             {/* AQUÍ VA TODO TU CÓDIGO ACTUAL: El título "Mis Incidencias", los botones, los gráficos, los filtros y la tabla de tickets */}
+            <div className="d-flex justify-content-between align-items-center mb-4">
           
           {rolUsuario === 'tecnico'&&(
             <h2 className="h3 text-secondary">Tickets</h2>
@@ -430,7 +568,7 @@ export default function Main({ cambiarVista, usuario }) {
                       
                       <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 11}} />
                       <Tooltip />
-                      <Bar dataKey="cantidad" fill="#0d6efd" radius={[0, 5, 5, 0]} />
+                      <Bar dataKey="cantidad" fill="#343a40" radius={[0, 5, 5, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -547,6 +685,88 @@ export default function Main({ cambiarVista, usuario }) {
             </table>
           </div>
         </div>
+          </div>
+        )}
+        {/* ==================================================== */}
+        {/* VISTA 2: NUEVA PANTALLA DE TAREAS RECURRENTES          */}
+        {/* ==================================================== */}
+        {pestañaActual === 'tareas' && (
+          <div className="animate__animated animate__fadeIn">
+            <h2 className="h3 text-secondary">Control de Tareas Diarias</h2>
+              
+              <div className="d-flex gap-2">
+                {rolUsuario === 'admin' && (
+                  <button className="btn btn-success fw-bold shadow-sm" onClick={exportarHistorialTareas}>
+                    📊 Descargar Historial
+                  </button>
+                )}
+                <button className="btn btn-primary shadow-sm" onClick={() => { setFormularioTarea({titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00'}); setMostrarModalTarea(true); }}>
+                  + Nueva Rutina
+                </button>
+              </div>
+            
+            <div className="card shadow-sm border-0">
+              <div className="card-body p-0 table-responsive">
+                <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
+                  <thead className="table-light">
+                    <tr>
+                      <th>Rutina a realizar</th>
+                      <th>Categoría</th>
+                      <th>Frecuencia</th>
+                      <th>Estado / Cuenta Regresiva</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                   {tareas.length > 0 ? (
+                      tareas.map(tarea => {
+                        // Verificamos si la tarea ya se completó hoy
+                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
+
+                        return (
+                          <tr 
+                            key={tarea.id} 
+                            // Si está completada, le bajamos la opacidad al 50% para el efecto difuminado
+                            style={{ opacity: completadaHoy ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
+                          >
+                            {/* Tachamos el título si ya está lista */}
+                            <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
+                              {tarea.titulo}
+                            </td>
+                            <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
+                            <td>{tarea.frecuencia} (⏰ {tarea.hora_programada.substring(0, 5)})</td>
+                            <td>
+                              <div className="d-flex flex-column align-items-center">
+                                <span className={`fw-bold px-2 py-1 rounded ${new Date(tarea.proxima_ejecucion) < new Date() ? 'bg-danger text-white' : 'bg-warning text-dark'}`}>
+                                  {calcularTiempoTarea(tarea.proxima_ejecucion)}
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              {/* Si está completada hoy, quitamos el botón y ponemos un sello */}
+                              {completadaHoy ? (
+                                <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
+                                  ✔️ Lista por hoy
+                                </span>
+                              ) : (
+                                <button className="btn btn-success btn-sm fw-bold shadow-sm px-4" onClick={() => marcarTareaCompletada(tarea.id)}>
+                                  ✅ Finalizar Hoy
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr><td colSpan="5" className="text-muted py-4">No hay rutinas programadas. ¡Crea la primera!</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      
       </main>
 
       {/* MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
@@ -694,6 +914,54 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         </div>
       )}
+      {/* ========================================== */}
+      {/* MODAL PARA CREAR RUTINA DIARIA             */}
+      {/* ========================================== */}
+      {mostrarModalTarea && (
+        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header bg-light">
+                <h5 className="modal-title fw-bold text-secondary">Programar Mantenimiento</h5>
+                <button type="button" className="btn-close" onClick={() => setMostrarModalTarea(false)}></button>
+              </div>
+              <div className="modal-body">
+                <form id="formTarea" onSubmit={guardarTarea}>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">¿Qué se debe realizar?</label>
+                    <input type="text" className="form-control" value={formularioTarea.titulo} onChange={(e) => setFormularioTarea({...formularioTarea, titulo: e.target.value})} placeholder="Ej: Limpiar depósito principal, Revisión de DVR..." required />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">Categoría</label>
+                    <select className="form-select" value={formularioTarea.categoria} onChange={(e) => setFormularioTarea({...formularioTarea, categoria: e.target.value})}>
+                      <option value="Limpieza / General">🧹 Limpieza e Instalaciones</option>
+                      <option value="CCTV y Servidores">📹 CCTV y Servidores</option>
+                      <option value="Redes">🌐 Mantenimiento de Red</option>
+                    </select>
+                  </div>
+                  <div className="row">
+                    <div className="col-6 mb-3">
+                      <label className="form-label fw-bold">Frecuencia</label>
+                      <select className="form-select" value={formularioTarea.frecuencia} onChange={(e) => setFormularioTarea({...formularioTarea, frecuencia: e.target.value})}>
+                        <option value="Diaria">Diaria</option>
+                      </select>
+                    </div>
+                    <div className="col-6 mb-3">
+                      <label className="form-label fw-bold">Hora Límite de Ejecución</label>
+                      <input type="time" className="form-control" value={formularioTarea.hora_programada} onChange={(e) => setFormularioTarea({...formularioTarea, hora_programada: e.target.value})} required />
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div className="modal-footer bg-light">
+                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalTarea(false)}>Cancelar</button>
+                <button type="submit" form="formTarea" className="btn btn-success">Guardar Rutina</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
+    
   )
 }
