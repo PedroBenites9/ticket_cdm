@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import logo from '../assets/CDMlogo(blanco).svg';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import logo from '../assets/logo.png';
+import * as XLSX from 'xlsx';
 
 export default function Main({ cambiarVista, usuario }) {
   const [tickets, setTickets] = useState([]);
@@ -12,36 +13,17 @@ export default function Main({ cambiarVista, usuario }) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
 
-  // ==========================================
-  // NUEVO (BITÁCORA): Estados para los comentarios
-  // ==========================================
   const [comentarios, setComentarios] = useState([]);
   const [nuevoComentario, setNuevoComentario] = useState('');
-// ==========================================
-  // MAGIA DEL CHAT: Referencia y Tiempo Real
-  // ==========================================
-  const finalDelChatRef = useRef(null); // Apuntador para el auto-scroll
+  const finalDelChatRef = useRef(null);
 
-  // Efecto 1: Bajar el scroll automáticamente cuando hay nuevos comentarios
-  useEffect(() => {
-    if (finalDelChatRef.current) {
-      finalDelChatRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [comentarios]); // Se ejecuta cada vez que la lista de comentarios cambia
+  // GESTIÓN DE USUARIOS
+  const [usuariosLista, setUsuariosLista] = useState([]);
+  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
 
-  // Efecto 2: "Polling" (preguntar al servidor cada 3 segundos si hay mensajes nuevos de otros)
-  useEffect(() => {
-    let intervalo;
-    if (editandoId) {
-      intervalo = setInterval(() => {
-        cargarComentarios(editandoId);
-      }, 3000); // 3000 milisegundos = 3 segundos
-    }
-    // Cuando cierras el modal, apagamos el motor para no gastar internet
-    return () => clearInterval(intervalo); 
-  }, [editandoId]);
+  // NUEVO: Agregamos tipo_origen al formulario inicial
   const [formulario, setFormulario] = useState({
-    asunto: '', categoria: '', prioridad: 'Media', descripcion: ''
+    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno'
   });
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
@@ -61,43 +43,50 @@ export default function Main({ cambiarVista, usuario }) {
     };
     obtenerTickets();
   }, []);
-// ==========================================
-  // ESTADOS Y FUNCIONES PARA GESTIÓN DE USUARIOS
-  // ==========================================
-  const [usuariosLista, setUsuariosLista] = useState([]);
-  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
 
-  const abrirPanelUsuarios = async () => {
-    try {
-      const respuesta = await fetch(`${URL_API}/usuarios`);
-      const datos = await respuesta.json();
-      setUsuariosLista(datos);
-      setMostrarModalUsuarios(true); // Abrimos la ventanita
-    } catch (error) {
-      toast.error("Error al cargar los usuarios.");
+  useEffect(() => {
+    if (finalDelChatRef.current) {
+      finalDelChatRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+  }, [comentarios]);
 
-  const cambiarRolUsuario = async (idUsuario, nuevoRol) => {
-    try {
-      await fetch(`${URL_API}/usuarios/${idUsuario}/rol`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rol: nuevoRol })
-      });
-      
-      // Actualizamos la tabla de la pantalla al instante
-      setUsuariosLista(usuariosLista.map(u => u.id === idUsuario ? { ...u, rol: nuevoRol } : u));
-      toast.success("Rol de usuario actualizado.");
-    } catch (error) {
-      toast.error("Error al cambiar el rol.");
+  useEffect(() => {
+    let intervalo;
+    if (editandoId) {
+      intervalo = setInterval(() => {
+        cargarComentarios(editandoId);
+      }, 3000); 
     }
-  };
+    return () => clearInterval(intervalo); 
+  }, [editandoId]);
+
   const obtenerColorEstado = (estado) => {
     if (estado === 'Abierto') return 'bg-danger';
     if (estado === 'En Proceso') return 'bg-warning text-dark';
     if (estado === 'Resuelto') return 'bg-success';
+    if (estado === 'Cerrado Definitivo') return 'bg-dark text-white';
     return 'bg-secondary';
+  };
+  // ==========================================
+  // NUEVO: Calcular cuenta regresiva (SLA de 5 días)
+  // ==========================================
+  const calcularTiempoRestante = (fechaFinalizado) => {
+    if (!fechaFinalizado) return "";
+    
+    const fechaFin = new Date(fechaFinalizado);
+    fechaFin.setDate(fechaFin.getDate() + 5); // Le sumamos 5 días a la fecha de resolución
+    
+    const ahora = new Date();
+    const diferenciaMs = fechaFin - ahora;
+
+    if (diferenciaMs <= 0) return "Cierre inminente"; // Si el backend tarda en cerrarlo
+
+    // Convertimos los milisegundos a días y horas
+    const dias = Math.floor(diferenciaMs / (1000 * 60 * 60 * 24));
+    const horas = Math.floor((diferenciaMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    if (dias > 0) return `${dias}d ${horas}h restantes`;
+    return `${horas}h restantes`;
   };
 
   const manejarCambio = (e) => {
@@ -105,15 +94,12 @@ export default function Main({ cambiarVista, usuario }) {
   };
 
   const abrirModalCrear = () => {
-    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '' });
+    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno' });
     setEditandoId(null);
-    setComentarios([]); // Limpiamos comentarios al crear uno nuevo
+    setComentarios([]); 
     setMostrarModal(true);
   };
 
-  // ==========================================
-  // NUEVO (BITÁCORA): Cargar comentarios al abrir el ticket
-  // ==========================================
   const cargarComentarios = async (idTicket) => {
     try {
       const respuesta = await fetch(`${URL_API}/tickets/${idTicket}/comentarios`);
@@ -129,19 +115,17 @@ export default function Main({ cambiarVista, usuario }) {
       asunto: ticket.asunto,
       categoria: ticket.categoria,
       prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion
+      descripcion: ticket.descripcion,
+      tipo_origen: ticket.tipo_origen || 'Interno'
     });
     setEditandoId(ticket.id);
-    cargarComentarios(ticket.id); // Pedimos al servidor el historial
+    cargarComentarios(ticket.id); 
     setNuevoComentario('');
     setMostrarModal(true);
   };
 
-  // ==========================================
-  // NUEVO (BITÁCORA): Función para enviar una nota
-  // ==========================================
   const enviarComentario = async () => {
-    if (!nuevoComentario.trim()) return; // No enviar si está vacío
+    if (!nuevoComentario.trim()) return; 
     try {
       const respuesta = await fetch(`${URL_API}/tickets/${editandoId}/comentarios`, {
         method: 'POST',
@@ -149,8 +133,8 @@ export default function Main({ cambiarVista, usuario }) {
         body: JSON.stringify({ autor: usuario, texto: nuevoComentario })
       });
       const comentarioCreado = await respuesta.json();
-      setComentarios([...comentarios, comentarioCreado]); // Lo agregamos a la pantalla al instante
-      setNuevoComentario(''); // Limpiamos la caja de texto
+      setComentarios([...comentarios, comentarioCreado]); 
+      setNuevoComentario(''); 
     } catch (error) {
       toast.error("Error al guardar la nota.");
     }
@@ -187,22 +171,26 @@ export default function Main({ cambiarVista, usuario }) {
 
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {
-      await fetch(`${URL_API}/tickets/${idTabla}`, {
+      const respuesta = await fetch(`${URL_API}/tickets/${idTabla}/estado`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
       });
+      if (!respuesta.ok) throw new Error("Fallo en servidor");
+      
+      // NUEVO: Atrapamos el ticket completo que devuelve PostgreSQL con la fecha exacta
+      const ticketActualizadoBD = await respuesta.json(); 
+
       const ticketsActualizados = tickets.map((ticket) => {
-        if (ticket.id === idTabla) return { ...ticket, estado: nuevoEstado };
+        if (ticket.id === idTabla) return ticketActualizadoBD; // Reemplazamos con los datos frescos
         return ticket;
       });
       setTickets(ticketsActualizados);
-      toast.success("Estado actualizado a: " + nuevoEstado);
+      toast.success(nuevoEstado === 'Resuelto' ? "¡Ticket Finalizado! Comienza cuenta regresiva de 5 días." : "Estado actualizado");
     } catch (error) {
       toast.error("Error al cambiar el estado.");
     }
   };
-
   const asignarmeTicket = async (idTabla) => {
     try {
       await fetch(`${URL_API}/tickets/asignar/${idTabla}`, {
@@ -226,13 +214,57 @@ export default function Main({ cambiarVista, usuario }) {
       try {
         const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
         if (!respuesta.ok) throw new Error("Fallo en servidor");
-        
         const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
         setTickets(ticketsRestantes);
         toast.error("Ticket eliminado del sistema."); 
       } catch (error) {
         toast.error("Error al intentar eliminar.");
       }
+    }
+  };
+
+  const exportarAExcel = () => {
+    const datosParaExcel = ticketsFiltrados.map(ticket => ({
+      "Código": ticket.codigo,
+      "Asunto": ticket.asunto,
+      "Origen": ticket.tipo_origen || 'Interno',
+      "Categoría": ticket.categoria,
+      "Prioridad": ticket.prioridad,
+      "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
+      "Estado": ticket.estado,
+      "Fecha de Creación": new Date(ticket.fecha_creacion).toLocaleDateString(),
+      "Fecha Finalizado": ticket.fecha_finalizado ? new Date(ticket.fecha_finalizado).toLocaleDateString() : 'Pendiente',
+      "Descripción Detallada": ticket.descripcion
+    }));
+    const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Reporte IT");
+    XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
+    toast.success("¡Reporte de Excel descargado con éxito!");
+  };
+
+  const abrirPanelUsuarios = async () => {
+    try {
+      const respuesta = await fetch(`${URL_API}/usuarios`);
+      const datos = await respuesta.json();
+      setUsuariosLista(datos);
+      setMostrarModalUsuarios(true);
+    } catch (error) {
+      toast.error("Error al cargar los usuarios.");
+    }
+  };
+
+  const cambiarRolUsuario = async (idUsuario, nuevoRol) => {
+    try {
+      await fetch(`${URL_API}/usuarios/${idUsuario}/rol`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rol: nuevoRol })
+      });
+      setUsuariosLista(usuariosLista.map(u => u.id === idUsuario ? { ...u, rol: nuevoRol } : u));
+      toast.success("Rol de usuario actualizado.");
+    } catch (error) {
+      toast.error("Error al cambiar el rol.");
     }
   };
 
@@ -280,12 +312,10 @@ export default function Main({ cambiarVista, usuario }) {
             />
           </span>
 
-          {/* CENTRO PERFECTO: El Título */}
           <div className="position-absolute start-50 translate-middle-x text-white d-none d-sm-block">
             <h5 className="mb-0 fw-bold tracking-wide">Sistema de Tickets</h5>
           </div>
           
-          {/* DERECHA: Menú de Usuario y Botones */}
           <div className="d-flex align-items-center gap-3">
             <span className="text-light d-none d-md-inline">
               Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
@@ -307,14 +337,22 @@ export default function Main({ cambiarVista, usuario }) {
             </button>
           </div>
         </div>
-      </header>   
+      </header>
 
       <main className="container mt-5">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h2 className="h3 text-secondary">Mis Incidencias</h2>
-          <button className="btn btn-primary" onClick={abrirModalCrear}>
-            + Nuevo Ticket
-          </button>
+          
+          <div className="d-flex gap-2">
+            {rolUsuario === 'admin' && (
+              <button className="btn btn-success fw-bold shadow-sm" onClick={exportarAExcel}>
+                📊 Descargar Excel
+              </button>
+            )}
+            <button className="btn btn-primary shadow-sm" onClick={abrirModalCrear}>
+              + Nuevo Ticket
+            </button>
+          </div>
         </div>
 
         {rolUsuario === 'admin' && (
@@ -376,12 +414,15 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
             <div className="col-md-6 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
-                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría</h6>
+                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría IT</h6>
                 <div style={{ height: '250px' }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                   <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      
+                      {/* NUEVO: Agregamos allowDecimals={false} para forzar números enteros */}
+                      <XAxis type="number" allowDecimals={false} />
+                      
+                      <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 11}} />
                       <Tooltip />
                       <Bar dataKey="cantidad" fill="#0d6efd" radius={[0, 5, 5, 0]} />
                     </BarChart>
@@ -392,11 +433,14 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         )}
 
+        {/* NUEVO: Filtros con las categorías reales de IT */}
         <div className="d-flex flex-wrap gap-2 mb-3">
           <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'CCTV y Seguridad' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('CCTV y Seguridad')}>📹 CCTV y Alarmas</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Terminaciones' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Terminaciones')}>🧱 Terminaciones</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Redes e Internet' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('Redes e Internet')}>🌐 Redes e Internet</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Active Directory / Accesos' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Active Directory / Accesos')}>🔑 Active Directory / Accesos</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware e Insumos</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'Software y SO' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFiltroCategoria('Software y SO')}>💽 Software y SO</button>
+        <button className={`btn btn-sm ${filtroCategoria === 'CCTV' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoria('CCTV')}>📹 CCTV</button>
         </div>
 
         <div className="mb-3">
@@ -405,14 +449,14 @@ export default function Main({ cambiarVista, usuario }) {
         
         <div className="card shadow-sm">
           <div className="card-body p-0 table-responsive">
-            <table className="table table-hover mb-0 text-center align-middle">
+            <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
               <thead className="table-light">
                 <tr>
                   <th>Código</th>
+                  <th>Origen</th>
                   <th>Asunto</th>
                   <th>Categoría</th>
-                  <th>Prioridad</th>
-                  <th>Técnico Asignado</th> 
+                  <th>Técnico</th> 
                   <th>Estado</th>
                   <th>Acciones</th> 
                 </tr>
@@ -422,32 +466,62 @@ export default function Main({ cambiarVista, usuario }) {
                   <tr><td colSpan="7">Cargando...</td></tr>
                 ) : ticketsFiltrados.length > 0 ? (
                   ticketsFiltrados.map((ticket) => (
-                    <tr key={ticket.id}>
+                   <tr key={ticket.id}>
+                      {/* 1. Código */}
                       <td className="fw-bold">{ticket.codigo}</td>
-                      <td>{ticket.asunto}</td>
-                      <td>{ticket.categoria}</td>
-                      <td>{ticket.prioridad}</td>
-                      <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
-                      <td><span className={`badge ${obtenerColorEstado(ticket.estado)}`}>{ticket.estado}</span></td>
+                      
+                      {/* 2. Origen */}
                       <td>
-                        <div className="d-flex justify-content-center gap-2">
-                          {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
-                            <select className="form-select form-select-sm" style={{ width: '110px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
-                              <option value="Abierto">Abierto</option>
-                              <option value="En Proceso">En Proceso</option>
-                              <option value="Resuelto">Resuelto</option>
-                            </select>
-                          )}
-                          {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
-                            <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
-                          )}
-                          {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-                            <button className="btn btn-warning btn-sm text-white" title="Abrir y Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
-                          )}
-                          {rolUsuario === 'admin' && (
-                            <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
+                        <span className={`badge ${ticket.tipo_origen === 'Externo' ? 'bg-purple text-white border border-purple' : 'bg-info text-dark'} `} style={{ backgroundColor: ticket.tipo_origen === 'Externo' ? '#6f42c1' : '' }}>
+                          {ticket.tipo_origen || 'Interno'}
+                        </span>
+                      </td>
+
+                      {/* 3. Asunto */}
+                      <td>{ticket.asunto}</td>
+                      
+                      {/* 4. Categoría */}
+                      <td>{ticket.categoria}</td>
+                      
+                      {/* 5. Técnico */}
+                      <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
+                      
+                      {/* 6. Estado (CON EL RELOJ) */}
+                      <td>
+                        <div className="d-flex flex-column align-items-center">
+                          <span className={`badge ${obtenerColorEstado(ticket.estado)}`}>{ticket.estado}</span>
+                          {ticket.estado === 'Resuelto' && ticket.fecha_finalizado && (
+                            <span className="text-muted mt-1" style={{ fontSize: '0.70rem', fontWeight: 'bold' }}>
+                              ⏱️ {calcularTiempoRestante(ticket.fecha_finalizado)}
+                            </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* 7. Acciones */}
+                      <td>
+                        {ticket.estado === 'Cerrado Definitivo' ? (
+                          <span className="badge bg-light text-dark border p-2">🔒 Archivado</span>
+                        ) : (
+                          <div className="d-flex justify-content-center align-items-center gap-1">
+                            {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                              <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
+                                <option value="Abierto">Abierto</option>
+                                <option value="En Proceso">En Proceso</option>
+                                <option value="Resuelto" className="fw-bold text-success">Resuelto</option>
+                              </select>
+                            )}
+                            {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                              <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
+                            )}
+                            {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                              <button className="btn btn-warning btn-sm text-white" title="Abrir y Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
+                            )}
+                            {rolUsuario === 'admin' && (
+                              <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -462,59 +536,67 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
       </main>
 
-      {/* EL MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
+      {/* MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg"> {/* modal-lg para hacerlo más ancho */}
+          <div className="modal-dialog modal-lg"> 
             <div className="modal-content">
               <div className="modal-header bg-light">
                 <h5 className="modal-title fw-bold text-secondary">
-                  {editandoId ? "Detalles y Bitácora del Ticket" : "Reportar Incidencia o Tarea"}
+                  {editandoId ? "Detalles y Bitácora del Ticket" : "Reportar Incidencia de Soporte IT"}
                 </h5>
                 <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
               </div>
               
               <div className="modal-body">
-                {/* Formulario principal del ticket. Nota el id="formTicket" */}
                 <form id="formTicket" onSubmit={guardarTicket}>
                   <div className="mb-3">
-                    <label className="form-label fw-bold">Asunto breve</label>
+                    <label className="form-label fw-bold">Asunto breve (Ej: PC sin internet)</label>
                     <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required />
                   </div>
                   <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label fw-bold">Categoría</label>
-                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
-                        <option value="" disabled>Seleccione...</option>
-                        <option value="CCTV y Seguridad">CCTV y Seguridad</option>
-                        <option value="Sistemas de Alarmas">Sistemas de Alarmas</option>
-                        <option value="Terminaciones">Terminaciones en Obra</option>
-                        <option value="Hardware e Insumos">Hardware e Insumos</option>
+                    
+                    {/* NUEVO: Selector de Origen (Interno/Externo) */}
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label fw-bold">Origen / Cliente</label>
+                      <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen} onChange={manejarCambio} required>
+                        <option value="Interno">🏢 Personal Interno</option>
+                        <option value="Externo">🤝 Cliente Externo</option>
                       </select>
                     </div>
-                    <div className="col-md-6 mb-3">
+
+                    <div className="col-md-5 mb-3">
+                      <label className="form-label fw-bold">Categoría IT</label>
+                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required>
+                        <option value="" disabled>Seleccione...</option>
+                        <option value="Redes e Internet">Redes e Internet</option>
+                        <option value="Active Directory / Accesos">Active Directory / Accesos</option>
+                        <option value="Hardware e Insumos">Hardware e Insumos</option>
+                        <option value="Software y SO">Software y Sistema Operativo</option>
+                        <option value="CCTV">CCTV</option>
+                      </select>
+                    </div>
+
+                    <div className="col-md-3 mb-3">
                       <label className="form-label fw-bold">Prioridad</label>
                       <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio}>
                         <option value="Baja">Baja</option>
                         <option value="Media">Media</option>
                         <option value="Alta">Alta</option>
+                        <option value="Urgente">🚨 Urgente</option>
                       </select>
                     </div>
                   </div>
                   <div className="mb-3">
                     <label className="form-label fw-bold">Descripción detallada</label>
-                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required></textarea>
+                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} placeholder="Explique el problema con el mayor detalle posible..." required></textarea>
                   </div>
                 </form>
 
-                {/* ========================================== */}
-                {/* NUEVO (BITÁCORA): Renderizado del Historial */}
-                {/* ========================================== */}
+                {/* BITÁCORA */}
                 {editandoId && (
                   <div className="mt-4 pt-4 border-top">
-                    <h6 className="fw-bold text-secondary mb-3">💬 Bitácora de procesos</h6>
-                    
-                  {/* Caja con scroll para los comentarios */}
+                    <h6 className="fw-bold text-secondary mb-3">💬 Bitácora de Soporte</h6>
                     <div className="bg-light p-3 rounded mb-3 border" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                       {comentarios.length > 0 ? (
                         comentarios.map((c) => (
@@ -531,44 +613,27 @@ export default function Main({ cambiarVista, usuario }) {
                       ) : (
                         <p className="text-muted small text-center mb-0 fst-italic">No hay notas registradas en este ticket.</p>
                       )}
-                      
-                      {/* NUEVO: El ancla invisible al final del chat */}
                       <div ref={finalDelChatRef} />
-                      
                     </div>
-
-                    {/* Input para agregar un nuevo comentario */}
                     <div className="d-flex gap-2">
-                      <input 
-                        type="text" 
-                        className="form-control form-control-sm" 
-                        placeholder="Escribir una actualización o repuesto necesario..." 
-                        value={nuevoComentario} 
-                        onChange={(e) => setNuevoComentario(e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} 
-                      />
-                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario}>
-                        Enviar
-                      </button>
+                      <input type="text" className="form-control form-control-sm" placeholder="Registrar una actualización del caso..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} />
+                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario}>Enviar</button>
                     </div>
                   </div>
                 )}
               </div>
-              
               <div className="modal-footer bg-light">
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
-                {/* Vinculamos este botón al id="formTicket" que está arriba */}
                 <button type="submit" form="formTicket" className="btn btn-success">
-                  {editandoId ? "Actualizar Datos del Ticket" : "Generar Ticket Nuevo"}
+                  {editandoId ? "Actualizar Ticket" : "Generar Nuevo Ticket"}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      {/* ========================================== */}
-      {/* MODAL DE GESTIÓN DE USUARIOS (SOLO ADMIN)  */}
-      {/* ========================================== */}
+
+      {/* MODAL DE GESTIÓN DE USUARIOS */}
       {mostrarModalUsuarios && rolUsuario === 'admin' && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
           <div className="modal-dialog modal-lg">
@@ -577,7 +642,6 @@ export default function Main({ cambiarVista, usuario }) {
                 <h5 className="modal-title fw-bold">👥 Gestión de Permisos y Roles</h5>
                 <button type="button" className="btn-close btn-close-white" onClick={() => setMostrarModalUsuarios(false)}></button>
               </div>
-              
               <div className="modal-body p-0">
                 <table className="table table-hover mb-0 text-center align-middle">
                   <thead className="table-light">
@@ -599,13 +663,7 @@ export default function Main({ cambiarVista, usuario }) {
                           </span>
                         </td>
                         <td>
-                          {/* El select que permite cambiar el rol */}
-                          <select 
-                            className="form-select form-select-sm mx-auto" 
-                            style={{ width: '130px' }} 
-                            value={u.rol} 
-                            onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}
-                          >
+                          <select className="form-select form-select-sm mx-auto" style={{ width: '130px' }} value={u.rol} onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}>
                             <option value="final">Usuario Final</option>
                             <option value="tecnico">Técnico</option>
                             <option value="admin">Administrador</option>
@@ -616,7 +674,6 @@ export default function Main({ cambiarVista, usuario }) {
                   </tbody>
                 </table>
               </div>
-              
               <div className="modal-footer bg-light">
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalUsuarios(false)}>Cerrar Panel</button>
               </div>
