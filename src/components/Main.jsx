@@ -3,9 +3,14 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import logo from '../assets/logo.png';
+import { useCarga } from '../../hooks/useCarga'; 
 import * as XLSX from 'xlsx';
 
 export default function Main({ cambiarVista, usuario }) {
+  // ==========================================
+  // USO DE HOOKS
+  // ==========================================
+  const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   // ==========================================
   // ESTADOS PARA TICKETS
   // ==========================================
@@ -161,6 +166,7 @@ export default function Main({ cambiarVista, usuario }) {
 
   const guardarTicket = async (e) => {
     e.preventDefault();
+    mostrarCarga();
     try {
       if (editandoId) {
         const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
@@ -185,6 +191,8 @@ export default function Main({ cambiarVista, usuario }) {
       setMostrarModal(false);
     } catch (error) {
       toast.error("Hubo un problema al procesar el ticket.");
+    }finally{
+      ocultarCarga();
     }
   };
 
@@ -439,7 +447,7 @@ export default function Main({ cambiarVista, usuario }) {
           
           <div className="d-flex align-items-center gap-3">
             <span className="text-light d-none d-md-inline">
-              Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
+              🙋🏼 Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
             </span>
             
             {rolUsuario === 'admin' && (
@@ -766,7 +774,7 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
           </div>
         )}
-      
+      {VistaCarga}
       </main>
 
       {/* MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
@@ -855,7 +863,7 @@ export default function Main({ cambiarVista, usuario }) {
                   </div>
                 )}
               </div>
-              <div className="modal-footer bg-light">
+              <div className="modal-footer bg-light" disabled={cargandoTicket}>
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
                 <button type="submit" form="formTicket" className="btn btn-success"disabled={esSoloLectura}>
                   {editandoId ? "Actualizar Ticket" : "Generar Nuevo Ticket"}

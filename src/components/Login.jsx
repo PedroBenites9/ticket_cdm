@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import logo from '../assets/logo.png';
+import { useCarga } from '../../hooks/useCarga'; 
 
 export default function Login({ cambiarVista, setUsuarioActual }) {
+  const { mostrarCarga, ocultarCarga } = useCarga();
   const [formulario, setFormulario] = useState({
     email: '',
     password: ''
@@ -18,7 +20,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
 
   const manejarIngreso = async (e) => {
     e.preventDefault();
-    
+    mostrarCarga();
     try {
       // Usamos la URL de producción de Render
       const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/login', {
@@ -42,9 +44,12 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
       } else {
         toast.error(datos.error || "Credenciales incorrectas.");
       }
+      setMostrarModal(false);
     } catch (error) {
       console.error("Error de conexión:", error);
       toast.error("No se pudo conectar con el servidor.");
+    }finally{
+      ocultarCarga();
     }
   };
 
