@@ -74,7 +74,7 @@ export default function Main({ cambiarVista, usuario }) {
     if (!fechaFinalizado) return "";
     
     const fechaFin = new Date(fechaFinalizado);
-    fechaFin.setDate(fechaFin.getDate() + 5); // Le sumamos 5 días a la fecha de resolución
+    fechaFin.setDate(fechaFin.getDate() + 1); // Le sumamos 1 días a la fecha de resolución
     
     const ahora = new Date();
     const diferenciaMs = fechaFin - ahora;
@@ -341,8 +341,12 @@ export default function Main({ cambiarVista, usuario }) {
 
       <main className="container mt-5">
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="h3 text-secondary">Mis Incidencias</h2>
           
+          {rolUsuario === 'tecnico'&&(
+            <h2 className="h3 text-secondary">Tickets</h2>
+          )|| rolUsuario === 'final'&&(
+            <h2 className="h3 text-secondary">Mis Incidencias</h2>
+          )}
           <div className="d-flex gap-2">
             {rolUsuario === 'admin' && (
               <button className="btn btn-success fw-bold shadow-sm" onClick={exportarAExcel}>
