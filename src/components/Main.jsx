@@ -308,7 +308,7 @@ export default function Main({ cambiarVista, usuario }) {
               src={logo} 
               alt="Logo Cruz de Malta" 
               className="img-fluid rounded" 
-              style={{ height: '40px', width: 'auto' }}
+              style={{ height: '70px', width: 'auto' }}
             />
           </span>
 
