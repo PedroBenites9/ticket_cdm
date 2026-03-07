@@ -44,7 +44,6 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
       } else {
         toast.error(datos.error || "Credenciales incorrectas.");
       }
-      setMostrarModal(false);
     } catch (error) {
       console.error("Error de conexión:", error);
       toast.error("No se pudo conectar con el servidor.");
