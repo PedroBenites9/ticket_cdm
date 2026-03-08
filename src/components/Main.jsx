@@ -167,31 +167,53 @@ export default function Main({ cambiarVista, usuario }) {
   const guardarTicket = async (e) => {
     e.preventDefault();
     mostrarCarga();
+    
     try {
+      // 1. EL TRUCO: Aseguramos tener el nombre (lee la variable o la memoria local)
+      const nombreReal = usuario || localStorage.getItem('nombre_usuario') || 'Usuario Desconocido';
+
+      // 2. ARMAMOS EL PAQUETE MAESTRO (Sirve tanto para crear como para editar)
+      const paqueteAEnviar = {
+        ...formulario, 
+        solicitante: nombreReal 
+      };
+
       if (editandoId) {
+        // --- MODO EDICIÓN (PUT) ---
+        // Actualizado a la ruta correcta de tu backend (/tickets/editar/:id)
         const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formulario)
-        });
+          body: JSON.stringify(paqueteAEnviar) 
+        }); 
+
+        if (!respuesta.ok) throw new Error("El servidor rechazó la edición del ticket");
+        
         const ticketActualizado = await respuesta.json();
         const ticketsNuevos = tickets.map(t => t.id === editandoId ? ticketActualizado : t);
         setTickets(ticketsNuevos);
         toast.success("¡Ticket actualizado correctamente!");
+
       } else {
+        // --- MODO CREACIÓN (POST) ---
         const respuesta = await fetch(`${URL_API}/tickets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formulario)
+          // ¡AQUÍ ESTABA EL ERROR! Ahora enviamos el paquete con el solicitante incluido
+          body: JSON.stringify(paqueteAEnviar)
         });
+
+        if (!respuesta.ok) throw new Error("El servidor rechazó el nuevo ticket");
+
         const ticketCreado = await respuesta.json();
         setTickets([ticketCreado, ...tickets]);
         toast.success("¡Ticket generado correctamente!"); 
       }
+      
       setMostrarModal(false);
     } catch (error) {
       toast.error("Hubo un problema al procesar el ticket.");
-    }finally{
+    } finally {
       ocultarCarga();
     }
   };
@@ -327,10 +349,20 @@ export default function Main({ cambiarVista, usuario }) {
   };
 
   const ticketsFiltrados = tickets.filter((ticket) => {
-    const coincideTexto = ticket.asunto.toLowerCase().includes(busqueda.toLowerCase()) || 
-                          (ticket.codigo && ticket.codigo.toLowerCase().includes(busqueda.toLowerCase()));
+    // 1. REGLA DE PRIVACIDAD: ¿Quién está mirando?
+    let permisoVer = false;
+    if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
+      permisoVer = true; // Los de IT ven todo el panorama
+    } else {
+      // El usuario final solo ve los tickets donde él sea el solicitante
+      permisoVer = ticket.solicitante === usuario; 
+    }
+    const coincideBusqueda = 
+  ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
+  ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
+  ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase());
     const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
-    return coincideTexto && coincideCategoria;
+    return permisoVer && coincideCategoria;
   });
 
   const totalTickets = tickets.length;
@@ -354,6 +386,7 @@ export default function Main({ cambiarVista, usuario }) {
     name: key,
     cantidad: conteoCategorias[key]
   }));
+  
   // ==========================================
   // FUNCIONES DE RUTINAS DIARIAS
   // ==========================================
@@ -606,6 +639,9 @@ export default function Main({ cambiarVista, usuario }) {
                 <tr>
                   <th>Código</th>
                   <th>Origen</th>
+                  {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                    <th>Solicitante</th>
+                  )}
                   <th>Asunto</th>
                   <th>Categoría</th>
                   <th>Técnico</th> 
@@ -628,17 +664,20 @@ export default function Main({ cambiarVista, usuario }) {
                           {ticket.tipo_origen || 'Interno'}
                         </span>
                       </td>
-
-                      {/* 3. Asunto */}
+                      {/* 3. Solicitante (Visible para Admin y Técnicos) */}
+                      {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                        <td>{ticket.solicitante || 'Usuario'}</td>
+                      )}
+                      {/* 4. Asunto */}
                       <td>{ticket.asunto}</td>
                       
-                      {/* 4. Categoría */}
+                      {/* 5. Categoría */}
                       <td>{ticket.categoria}</td>
                       
-                      {/* 5. Técnico */}
+                      {/* 6. Técnico */}
                       <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
                       
-                      {/* 6. Estado (CON EL RELOJ) */}
+                      {/* 7. Estado (CON EL RELOJ) */}
                       <td>
                         <div className="d-flex flex-column align-items-center">
                           <span className={`badge ${obtenerColorEstado(ticket.estado)}`}>{ticket.estado}</span>
@@ -650,7 +689,7 @@ export default function Main({ cambiarVista, usuario }) {
                         </div>
                       </td>
 
-                      {/* 7. Acciones */}
+                      {/* 8. Acciones */}
                       <td>
                         {ticket.estado === 'Cerrado Definitivo' ? (
                          <div className="d-flex justify-content-center align-items-center gap-2">
@@ -863,7 +902,7 @@ export default function Main({ cambiarVista, usuario }) {
                   </div>
                 )}
               </div>
-              <div className="modal-footer bg-light" disabled={cargandoTicket}>
+              <div className="modal-footer bg-light" >
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
                 <button type="submit" form="formTicket" className="btn btn-success"disabled={esSoloLectura}>
                   {editandoId ? "Actualizar Ticket" : "Generar Nuevo Ticket"}
