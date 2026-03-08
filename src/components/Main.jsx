@@ -5,6 +5,9 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Resp
 import logo from '../assets/logo.png';
 import { useCarga } from '../../hooks/useCarga'; 
 import * as XLSX from 'xlsx';
+import { io } from 'socket.io-client';
+
+const socket = io('https://back-tickets-u01r.onrender.com');
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
@@ -23,6 +26,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [comentarios, setComentarios] = useState([]);
   const [nuevoComentario, setNuevoComentario] = useState('');
   const finalDelChatRef = useRef(null);
+  
 
   // GESTIÓN DE USUARIOS
   const [usuariosLista, setUsuariosLista] = useState([]);
@@ -47,18 +51,16 @@ export default function Main({ cambiarVista, usuario }) {
 // NUEVO: Identificamos si el ticket abierto está bloqueado
   const ticketAbierto = tickets.find(t => t.id === editandoId);
   const esSoloLectura = ticketAbierto?.estado === 'Cerrado Definitivo';
+
   useEffect(() => {
-   const obtenerDatos = async () => {
+    // 1. Carga inicial tradicional (una sola vez)
+    const obtenerDatos = async () => {
       try {
-        // 1. Cargar Tickets
         const respuestaTickets = await fetch(`${URL_API}/tickets`);
         setTickets(await respuestaTickets.json());
 
-        // 2. Cargar Tareas
         const respuestaTareas = await fetch(`${URL_API}/tareas`);
-        const datosTareas = await respuestaTareas.json();
-        setTareas(datosTareas);
-
+        setTareas(await respuestaTareas.json());
       } catch (error) {
         toast.error("Error al cargar los datos del servidor.");
       } finally {
@@ -66,7 +68,38 @@ export default function Main({ cambiarVista, usuario }) {
       }
     };
     obtenerDatos();
-  }, []);
+
+    // ==================================================
+    // 2. MAGIA WEBSOCKETS: Escuchamos eventos en tiempo real
+    // ==================================================
+    
+    // Si alguien crea un ticket, lo agregamos arriba de la lista sin recargar
+    socket.on('ticketCreado', (nuevoTicket) => {
+      setTickets((ticketsAnteriores) => {
+        // ¿Ya existe este ticket en mi tabla local?
+        const yaExiste = ticketsAnteriores.some(ticket => ticket.id === nuevoTicket.id);
+        
+        if (yaExiste) {
+          return ticketsAnteriores; // Si ya existe (porque lo creé yo), ignoramos el mensaje
+        }
+        
+        return [nuevoTicket, ...ticketsAnteriores]; // Si no existe (lo creó otra persona), lo agregamos
+      });
+    });
+
+    // Si alguien edita o cambia de estado, actualizamos ese renglón específico
+    socket.on('ticketModificado', (ticketEditado) => {
+      setTickets((ticketsAnteriores) => 
+        ticketsAnteriores.map(t => t.id === ticketEditado.id ? ticketEditado : t)
+      );
+    });
+
+    // 3. Limpiamos la memoria si el usuario cierra la página
+    return () => {
+      socket.off('ticketCreado');
+      socket.off('ticketModificado');
+    };
+  }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
   useEffect(() => {
     if (finalDelChatRef.current) {
