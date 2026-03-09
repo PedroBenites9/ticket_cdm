@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useCarga } from '../../hooks/useCarga'; 
 
 export default function Register({ cambiarVista }) {
+  const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   // 1. Estado para guardar los datos del formulario
   const [formulario, setFormulario] = useState({
     nombre: '',
@@ -20,7 +22,7 @@ export default function Register({ cambiarVista }) {
   // 3. Función que envía los datos al Backend al hacer clic en "Registrarme"
   const manejarRegistro = async (e) => {
     e.preventDefault();
-
+    mostrarCarga();
     try {
       const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/registro', {
         method: 'POST',
@@ -29,7 +31,7 @@ export default function Register({ cambiarVista }) {
       });
 
       const datos = await respuesta.json();
-
+      
       if (respuesta.ok) {
         toast.success("¡Cuenta creada con éxito! Ahora puedes iniciar sesión.");
         cambiarVista('login'); // Lo enviamos al login automáticamente
@@ -40,6 +42,8 @@ export default function Register({ cambiarVista }) {
     } catch (error) {
       console.error("Error de conexión:", error);
       toast.error("No se pudo conectar con el servidor.");
+    }finally{
+      ocultarCarga();
     }
   };
 
@@ -96,6 +100,7 @@ export default function Register({ cambiarVista }) {
           </div>
         </div>
       </div>
+      {VistaCarga}
     </div>
   )
 }
