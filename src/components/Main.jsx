@@ -534,7 +534,7 @@ export default function Main({ cambiarVista, usuario }) {
         </div>
       </header>
 
-      <main className="container mt-5">
+      <main className="container mt-5 mb-5">
         {/* LAS PESTAÑAS DE NAVEGACIÓN */}
         <ul className="nav nav-tabs mb-4 border-bottom-0 gap-1">
           <li className="nav-item">
@@ -549,7 +549,7 @@ export default function Main({ cambiarVista, usuario }) {
           </li>
         </ul>
         {/* ==================================================== */}
-        {/* VISTA 1: TUS TICKETS DE SIEMPRE                        */}
+        {/* VISTA 1: TICKETS                       */}
         {/* ==================================================== */}
         {pestañaActual === 'tickets' && (
           <div className="animate__animated animate__fadeIn">
