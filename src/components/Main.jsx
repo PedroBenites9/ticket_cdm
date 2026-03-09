@@ -93,13 +93,42 @@ export default function Main({ cambiarVista, usuario }) {
         ticketsAnteriores.map(t => t.id === ticketEditado.id ? ticketEditado : t)
       );
     });
+    
+    // ==================================================
+    // MAGIA WEBSOCKETS: TAREAS Y RUTINAS
+    // ==================================================
+    
+    // Antena 1: Si alguien crea una nueva rutina
+    socket.on('tareaCreada', (nuevaTarea) => {
+      setTareas((tareasAnteriores) => {
+        // Filtro anti-eco: ¿La tarea nueva ya la tengo dibujada?
+        const yaExiste = tareasAnteriores.some(t => t.id === nuevaTarea.id);
+        if (yaExiste) return tareasAnteriores;
+        
+        // Si no la tengo, la agrego y ordeno la lista por hora
+        return [...tareasAnteriores, nuevaTarea].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
+      });
+    });
 
-    // 3. Limpiamos la memoria si el usuario cierra la página
+    // Antena 2: Si alguien completa una rutina
+    socket.on('tareaCompletada', (tareaActualizada) => {
+      setTareas((tareasAnteriores) => {
+        // Busco la tarea vieja en mi lista y la reemplazo por la nueva (que ya viene tachada del backend)
+        const nuevasTareas = tareasAnteriores.map(t => t.id === tareaActualizada.id ? tareaActualizada : t);
+        
+        // Vuelvo a ordenar por si acaso
+        return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
+      });
+    });
+
+    // Limpiamos la memoria si el usuario cierra la página o sesión
     return () => {
       socket.off('ticketCreado');
       socket.off('ticketModificado');
+      socket.off('tareaCreada');       // <-- ¡NUEVO! Apagamos antena 1
+      socket.off('tareaCompletada');   // <-- ¡NUEVO! Apagamos antena 2
     };
-  }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
+    }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
   useEffect(() => {
     if (finalDelChatRef.current) {
@@ -542,11 +571,14 @@ export default function Main({ cambiarVista, usuario }) {
               🎫 Soporte IT
             </button>
           </li>
-          <li className="nav-item">
+          {(rolUsuario === 'admin' || rolUsuario === 'tecnico') &&  (
+            <li className="nav-item">
             <button className={`nav-link text-dark ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} onClick={() => setPestañaActual('tareas')}>
               🔄 Mantenimiento y Rutinas
             </button>
           </li>
+          )}
+          
         </ul>
         {/* ==================================================== */}
         {/* VISTA 1: TICKETS                       */}
@@ -770,7 +802,7 @@ export default function Main({ cambiarVista, usuario }) {
         {/* ==================================================== */}
         {/* VISTA 2: NUEVA PANTALLA DE TAREAS RECURRENTES          */}
         {/* ==================================================== */}
-        {pestañaActual === 'tareas' && (
+        {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && pestañaActual === 'tareas' && (
           <div className="animate__animated animate__fadeIn">
             <h2 className="h3 text-secondary">Control de Tareas Diarias</h2>
               
