@@ -5,7 +5,7 @@ import logo from '../assets/logo.png';
 import { useCarga } from '../../hooks/useCarga'; 
 
 export default function Login({ cambiarVista, setUsuarioActual }) {
-  const { mostrarCarga, ocultarCarga } = useCarga();
+  const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   const [formulario, setFormulario] = useState({
     email: '',
     password: ''
@@ -137,6 +137,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
           </div>
         </div>
       </motion.div>
+        {VistaCarga}
     </div>
   )
 }
