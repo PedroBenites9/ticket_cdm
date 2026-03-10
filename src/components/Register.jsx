@@ -8,7 +8,8 @@ export default function Register({ cambiarVista }) {
   const [formulario, setFormulario] = useState({
     nombre: '',
     email: '',
-    password: ''
+    password: '',
+    area: ''
   });
 
   // 2. Función para actualizar el estado mientras el usuario escribe
@@ -42,7 +43,8 @@ export default function Register({ cambiarVista }) {
     } catch (error) {
       console.error("Error de conexión:", error);
       toast.error("No se pudo conectar con el servidor.");
-    }finally{
+    } finally {
+      // ESTO ASEGURA QUE LA PANTALLA DE CARGA SE QUITE
       ocultarCarga();
     }
   };
@@ -82,6 +84,25 @@ export default function Register({ cambiarVista }) {
                 onChange={manejarCambio}
                 required
               />
+              {/* NUEVO: Selector de Áreas */}
+              <select 
+                className="form-select mb-3 border-secondary" 
+                name="area"
+                value={formulario.area}
+                onChange={manejarCambio}
+                required
+              >
+                <option value="" disabled>Seleccione su Área...</option>
+                <option value="Tesoreria">Tesorería</option>
+                <option value="Sindico">Síndico</option>
+                <option value="Operaciones">Operaciones</option>
+                <option value="Comercial">Comercial</option>
+                <option value="Logistica">Logística</option>
+                <option value="RRHH">RRHH</option>
+                <option value="Incorporaciones">Incorporaciones</option>
+                <option value="Habilitaciones">Habilitaciones</option>
+                <option value="Tecnologia">Tecnología (IT)</option>
+              </select>
               
               <button type="submit" className="btn btn-success w-100">
                 Registrarme

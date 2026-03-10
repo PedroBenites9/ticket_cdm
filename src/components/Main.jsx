@@ -48,6 +48,11 @@ export default function Main({ cambiarVista, usuario }) {
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
+ let areaUsuario = localStorage.getItem('area_usuario');
+  // Si no existe, o si es literalmente la palabra "undefined" o "null"
+  if (!areaUsuario || areaUsuario === 'undefined' || areaUsuario === 'null') {
+    areaUsuario = 'Área no asignada';
+  } // <-- NUEVO
 // NUEVO: Identificamos si el ticket abierto está bloqueado
   const ticketAbierto = tickets.find(t => t.id === editandoId);
   const esSoloLectura = ticketAbierto?.estado === 'Cerrado Definitivo';
@@ -541,10 +546,11 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
           
           <div className="d-flex align-items-center gap-3">
-            <span className="text-light d-none d-md-inline">
-              🙋🏼 Hola, <strong>{usuario}</strong> <span className="badge bg-secondary ms-1">{rolUsuario.toUpperCase()}</span>
+           <span className="text-light d-none d-md-inline">
+              🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areaUsuario})</span>
+              <span className="badge bg-secondary ms-2">{rolUsuario.toUpperCase()}</span>
             </span>
-            
+            {console.log({areaUsuario})}
             {rolUsuario === 'admin' && (
               <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
                 👥 Usuarios
