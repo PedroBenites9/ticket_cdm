@@ -160,7 +160,7 @@ export default function Main({ cambiarVista, usuario }) {
     if (!fechaFinalizado) return "";
     
     const fechaFin = new Date(fechaFinalizado);
-    fechaFin.setDate(fechaFin.getDate() + 1); // Le sumamos 1 días a la fecha de resolución
+    fechaFin.setDate(fechaFin.getDate() + 5); // Le sumamos 5 días a la fecha de resolución
     
     const ahora = new Date();
     const diferenciaMs = fechaFin - ahora;
@@ -684,6 +684,7 @@ export default function Main({ cambiarVista, usuario }) {
         )}
 
         {/* NUEVO: Filtros con las categorías reales de IT */}
+        {(rolUsuario  === 'Administrador' || rolUsuario === 'Tecnico') && (
         <div className="d-flex flex-wrap gap-2 mb-3">
           <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
           <button className={`btn btn-sm ${filtroCategoria === 'Redes e Internet' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('Redes e Internet')}>🌐 Redes e Internet</button>
@@ -692,6 +693,7 @@ export default function Main({ cambiarVista, usuario }) {
           <button className={`btn btn-sm ${filtroCategoria === 'Software y SO' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFiltroCategoria('Software y SO')}>💽 Software y SO</button>
         <button className={`btn btn-sm ${filtroCategoria === 'CCTV' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoria('CCTV')}>📹 CCTV</button>
         </div>
+        )}
 
         <div className="mb-3">
           <input type="text" className="form-control" placeholder="🔍 Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
