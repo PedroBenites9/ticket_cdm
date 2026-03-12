@@ -125,13 +125,20 @@ export default function Main({ cambiarVista, usuario }) {
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
       });
     });
-
+    // ---> NUEVO: Antena 3: Si alguien inicia o pausa una tarea
+    socket.on('tareaModificada', (tareaActualizada) => {
+      setTareas((tareasAnteriores) => {
+        const nuevasTareas = tareasAnteriores.map(t => t.id === tareaActualizada.id ? tareaActualizada : t);
+        return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
+      });
+    });
     // Limpiamos la memoria si el usuario cierra la página o sesión
     return () => {
       socket.off('ticketCreado');
       socket.off('ticketModificado');
       socket.off('tareaCreada');       // <-- ¡NUEVO! Apagamos antena 1
       socket.off('tareaCompletada');   // <-- ¡NUEVO! Apagamos antena 2
+      socket.off('tareaModificada');
     };
     }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
@@ -375,9 +382,12 @@ export default function Main({ cambiarVista, usuario }) {
         "ID Tarea": registro.tarea_id,
         "Rutina Realizada": registro.titulo_tarea,
         "Completado Por": registro.usuario_que_completo,
-        "Fecha Exacta": new Date(registro.fecha_completada).toLocaleDateString(),
-        "Hora Exacta": new Date(registro.fecha_completada).toLocaleTimeString()
-      }));
+        "Fecha de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleDateString() : 'Sin registro',
+        "Hora de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleTimeString() : 'Sin registro',
+        "Fecha de Finalización": new Date(registro.fecha_completada).toLocaleDateString(),
+        "Hora de Finalización": new Date(registro.fecha_completada).toLocaleTimeString(),
+        "Tiempo de Ejecución Real": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : 'Sin registro'
+      }));  
 
       const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
       const libro = XLSX.utils.book_new();
@@ -505,6 +515,26 @@ export default function Main({ cambiarVista, usuario }) {
       toast.error("Error al actualizar la rutina.");
     }
   };
+  // ==========================================
+  // NUEVO: FUNCIONES DEL CRONÓMETRO
+  // ==========================================
+  const iniciarTarea = async (id) => {
+    try {
+      await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
+      toast.success("▶ Cronómetro iniciado. ¡A trabajar!");
+    } catch (error) {
+      toast.error("Error al iniciar la tarea.");
+    }
+  };
+
+  const pausarTarea = async (id) => {
+    try {
+      await fetch(`${URL_API}/tareas/${id}/pausar`, { method: 'PUT' });
+      toast.warning("⏸ Tarea pausada. El tiempo se ha guardado.");
+    } catch (error) {
+      toast.error("Error al pausar la tarea.");
+    }
+  };
   const calcularTiempoTarea = (fechaFutura) => {
     if (!fechaFutura) return "";
     const difMs = new Date(fechaFutura) - new Date();
@@ -550,7 +580,7 @@ export default function Main({ cambiarVista, usuario }) {
               🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areaUsuario})</span>
               <span className="badge bg-secondary ms-2">{rolUsuario.toUpperCase()}</span>
             </span>
-            {console.log({areaUsuario})}
+           
             {rolUsuario === 'admin' && (
               <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
                 👥 Usuarios
@@ -862,16 +892,54 @@ export default function Main({ cambiarVista, usuario }) {
                                 </span>
                               </div>
                             </td>
+                            {/* 5. Acciones y Botones del Cronómetro */}
                             <td>
-                              {/* Si está completada hoy, quitamos el botón y ponemos un sello */}
                               {completadaHoy ? (
                                 <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
                                   ✔️ Lista por hoy
                                 </span>
                               ) : (
-                                <button className="btn btn-success btn-sm fw-bold shadow-sm px-4" onClick={() => marcarTareaCompletada(tarea.id)}>
-                                  ✅ Finalizar Hoy
-                                </button>
+                                <div className="d-flex justify-content-center flex-column align-items-center gap-2">
+                                  <div className="d-flex gap-2">
+                                    {/* Si está Pausada o Pendiente: Botón de INICIAR */}
+                                    {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa) && (
+                                      <button 
+                                        className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
+                                        onClick={() => iniciarTarea(tarea.id)}
+                                        title="Iniciar o Reanudar tarea"
+                                      >
+                                        ▶ Iniciar
+                                      </button>
+                                    )}
+
+                                    {/* Si está En Curso: Botón de PAUSAR */}
+                                    {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
+                                      <button 
+                                        className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
+                                        onClick={() => pausarTarea(tarea.id)}
+                                        title="Pausar por una emergencia"
+                                      >
+                                        ⏸ Pausar
+                                      </button>
+                                    )}
+
+                                    {/* Botón FINALIZAR */}
+                                    <button 
+                                      className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
+                                      onClick={() => marcarTareaCompletada(tarea.id)}
+                                      title="Finalizar tarea"
+                                    >
+                                      ✅ Finalizar
+                                    </button>
+                                  </div>
+                                  
+                                  {/* NUEVO: Mostramos los minutos acumulados abajo de los botones */}
+                                  {tarea.tiempo_acumulado_minutos > 0 && !completadaHoy && (
+                                    <div className="text-muted mt-1" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                      ⏱️ {Math.floor(tarea.tiempo_acumulado_minutos)} min dedicados
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
