@@ -43,7 +43,8 @@ export default function Main({ cambiarVista, usuario }) {
   const [tareas, setTareas] = useState([]);
   const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
   const [formularioTarea, setFormularioTarea] = useState({
-    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00'
+    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00',dias_especificos: [], // <-- NUEVO: Guardará los números de los días (Ej: [1, 3, 5])
+    fecha_unica: ''       // <-- NUEVO: Guardará "2026-03-25"
   });
 
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
@@ -457,24 +458,44 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // FUNCIONES DE RUTINAS DIARIAS
   // ==========================================
-  const guardarTarea = async (e) => {
+
+  // NUEVO: Función para tildar y destildar días de la semana
+  const manejarDias = (diaId) => {
+    const { dias_especificos } = formularioTarea;
+    if (dias_especificos.includes(diaId)) {
+      // Si ya estaba tildado, lo quitamos
+      setFormularioTarea({ ...formularioTarea, dias_especificos: dias_especificos.filter(d => d !== diaId) });
+    } else {
+      // Si no estaba, lo agregamos
+      setFormularioTarea({ ...formularioTarea, dias_especificos: [...dias_especificos, diaId] });
+    }
+  };
+
+ const guardarTarea = async (e) => {
     e.preventDefault();
     try {
-      // Magia: Calcular la próxima ejecución basándose en la hora
       const ahora = new Date();
       const [horas, minutos] = formularioTarea.hora_programada.split(':');
       let proxima = new Date();
-      proxima.setHours(horas, minutos, 0, 0);
       
-      // Si la hora límite ya pasó hoy, se programa directamente para mañana
-      if (proxima <= ahora) {
-        proxima.setDate(proxima.getDate() + 1);
+      // Lógica de creación inicial
+      if (formularioTarea.frecuencia === 'Fecha Unica' && formularioTarea.fecha_unica) {
+        // Si es fecha única, armamos la fecha exacta con su hora
+        proxima = new Date(`${formularioTarea.fecha_unica}T${formularioTarea.hora_programada}:00`);
+      } else {
+        // Para las demás, calculamos hoy o mañana inicialmente (el backend hará la magia pesada luego)
+        proxima.setHours(horas, minutos, 0, 0);
+        if (proxima <= ahora) proxima.setDate(proxima.getDate() + 1);
       }
 
       const respuesta = await fetch(`${URL_API}/tareas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formularioTarea, proxima_ejecucion: proxima.toISOString() })
+        // Enviamos TODO: proxima_ejecucion, dias_especificos y fecha_unica
+        body: JSON.stringify({ 
+          ...formularioTarea, 
+          proxima_ejecucion: proxima.toISOString() 
+        })
       });
       
       const tareaCreada = await respuesta.json();
@@ -550,7 +571,6 @@ export default function Main({ cambiarVista, usuario }) {
               🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areaUsuario})</span>
               <span className="badge bg-secondary ms-2">{rolUsuario.toUpperCase()}</span>
             </span>
-            {console.log({areaUsuario})}
             {rolUsuario === 'admin' && (
               <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
                 👥 Usuarios
@@ -1059,11 +1079,15 @@ export default function Main({ cambiarVista, usuario }) {
                       <option value="Redes">🌐 Mantenimiento de Red</option>
                     </select>
                   </div>
-                  <div className="row">
+                 <div className="row">
                     <div className="col-6 mb-3">
                       <label className="form-label fw-bold">Frecuencia</label>
                       <select className="form-select" value={formularioTarea.frecuencia} onChange={(e) => setFormularioTarea({...formularioTarea, frecuencia: e.target.value})}>
                         <option value="Diaria">Diaria</option>
+                        <option value="Semanal">Semanal</option>
+                        <option value="Mensual">Mensual</option>
+                        <option value="Dias Especificos" className="fw-bold text-primary">📅 Días Específicos</option>
+                        <option value="Fecha Unica" className="fw-bold text-success">🎯 Fecha Única</option>
                       </select>
                     </div>
                     <div className="col-6 mb-3">
@@ -1071,6 +1095,44 @@ export default function Main({ cambiarVista, usuario }) {
                       <input type="time" className="form-control" value={formularioTarea.hora_programada} onChange={(e) => setFormularioTarea({...formularioTarea, hora_programada: e.target.value})} required />
                     </div>
                   </div>
+
+                  {/* MAGIA CONDICIONAL: Solo aparece si eligen "Días Específicos" */}
+                  {formularioTarea.frecuencia === 'Dias Especificos' && (
+                    <div className="mb-3 p-3 bg-light border rounded shadow-sm">
+                      <label className="form-label fw-bold d-block mb-2 text-primary">Seleccione los días a realizar:</label>
+                      <div className="d-flex flex-wrap gap-2 justify-content-between">
+                        {/* Nota: En JavaScript el Domingo es el día 0, Lunes 1, etc. */}
+                        {[{id: 1, label: 'Lun'}, {id: 2, label: 'Mar'}, {id: 3, label: 'Mié'}, {id: 4, label: 'Jue'}, {id: 5, label: 'Vie'}, {id: 6, label: 'Sáb'}, {id: 0, label: 'Dom'}].map(dia => (
+                          <div className="form-check form-check-inline me-0" key={dia.id}>
+                            <input 
+                              className="form-check-input border-primary cursor-pointer" 
+                              type="checkbox" 
+                              id={`dia-${dia.id}`} 
+                              checked={formularioTarea.dias_especificos.includes(dia.id)}
+                              onChange={() => manejarDias(dia.id)} 
+                            />
+                            <label className="form-check-label fw-bold text-secondary cursor-pointer" htmlFor={`dia-${dia.id}`}>
+                              {dia.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MAGIA CONDICIONAL: Solo aparece si eligen "Fecha Única" */}
+                  {formularioTarea.frecuencia === 'Fecha Unica' && (
+                    <div className="mb-3 p-3 bg-light border rounded shadow-sm border-success">
+                      <label className="form-label fw-bold text-success">Seleccione la Fecha Exacta:</label>
+                      <input 
+                        type="date" 
+                        className="form-control border-success" 
+                        value={formularioTarea.fecha_unica} 
+                        onChange={(e) => setFormularioTarea({...formularioTarea, fecha_unica: e.target.value})} 
+                        required={formularioTarea.frecuencia === 'Fecha Unica'} 
+                      />
+                    </div>
+                  )}
                 </form>
               </div>
               <div className="modal-footer bg-light">
