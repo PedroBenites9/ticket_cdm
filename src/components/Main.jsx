@@ -840,7 +840,7 @@ export default function Main({ cambiarVista, usuario }) {
                     📊 Descargar Historial
                   </button>
                 )}
-                <button className="btn btn-primary shadow-sm" onClick={() => { setFormularioTarea({titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00'}); setMostrarModalTarea(true); }}>
+                <button className="btn btn-primary shadow-sm" onClick={() => { setFormularioTarea({titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00',dias_especificos: [], fecha_unica: ''}); setMostrarModalTarea(true); }}>
                   + Nueva Rutina
                 </button>
               </div>
@@ -1108,7 +1108,7 @@ export default function Main({ cambiarVista, usuario }) {
                               className="form-check-input border-primary cursor-pointer" 
                               type="checkbox" 
                               id={`dia-${dia.id}`} 
-                              checked={formularioTarea.dias_especificos.includes(dia.id)}
+                              checked={formularioTarea.dias_especificos?.includes(dia.id)}
                               onChange={() => manejarDias(dia.id)} 
                             />
                             <label className="form-check-label fw-bold text-secondary cursor-pointer" htmlFor={`dia-${dia.id}`}>
