@@ -133,14 +133,20 @@ export default function Main({ cambiarVista, usuario }) {
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
       });
     });
-    // Limpiamos la memoria si el usuario cierra la página o sesión
+    // ---> NUEVO: Antena 4: Si alguien elimina una tarea
+    socket.on('tareaEliminada', (idTareaEliminada) => {
+      setTareas((tareasAnteriores) => tareasAnteriores.filter(t => t.id !== idTareaEliminada));
+    });
+
+    // Y recuerda apagarla en el return de limpieza que está justo abajo:
     return () => {
       socket.off('ticketCreado');
       socket.off('ticketModificado');
-      socket.off('tareaCreada');       // <-- ¡NUEVO! Apagamos antena 1
-      socket.off('tareaCompletada');   // <-- ¡NUEVO! Apagamos antena 2
+      socket.off('tareaCreada');       
+      socket.off('tareaCompletada');   
       socket.off('tareaModificada');
-    };
+      socket.off('tareaEliminada');  // <-- Apagamos antena 4
+    };  
     }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
   useEffect(() => {
@@ -483,55 +489,46 @@ export default function Main({ cambiarVista, usuario }) {
 
  const guardarTarea = async (e) => {
     e.preventDefault();
+    mostrarCarga(); // Siempre es buena idea mostrar el loader
     try {
-      const ahora = new Date();
-      const [horas, minutos] = formularioTarea.hora_programada.split(':');
-      let proxima = new Date();
-      
-      // Lógica de creación inicial
-      if (formularioTarea.frecuencia === 'Fecha Unica' && formularioTarea.fecha_unica) {
-        // Si es fecha única, armamos la fecha exacta con su hora
-        proxima = new Date(`${formularioTarea.fecha_unica}T${formularioTarea.hora_programada}:00`);
-      } else {
-        // Para las demás, calculamos hoy o mañana inicialmente (el backend hará la magia pesada luego)
-        proxima.setHours(horas, minutos, 0, 0);
-        if (proxima <= ahora) proxima.setDate(proxima.getDate() + 1);
-      }
-
+      // EL FRONTEND ES TONTO: Solo toma lo que el usuario completó en el formulario y se lo lanza al Backend
       const respuesta = await fetch(`${URL_API}/tareas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Enviamos TODO: proxima_ejecucion, dias_especificos y fecha_unica
-        body: JSON.stringify({ 
-          ...formularioTarea, 
-          proxima_ejecucion: proxima.toISOString() 
-        })
+        body: JSON.stringify(formularioTarea) 
       });
       
       const tareaCreada = await respuesta.json();
+      
       setTareas([...tareas, tareaCreada].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion)));
       setMostrarModalTarea(false);
       toast.success("¡Rutina programada con éxito!");
     } catch (error) {
       toast.error("Error al crear la rutina.");
+    } finally {
+      ocultarCarga();
     }
   };
-
-  const marcarTareaCompletada = async (id) => {
+const marcarTareaCompletada = async (id) => {
     try {
-      // NUEVO: Enviamos el usuario en el body
       const respuesta = await fetch(`${URL_API}/tareas/${id}/completar`, { 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario: usuario }) 
       });
+
+      // ---> ¡ESTE ES EL ESCUDO ANTI-BUGS! <---
+      if (!respuesta.ok) {
+        throw new Error("El servidor falló al completar la tarea");
+      }
+
       const tareaActualizada = await respuesta.json();
       
       const nuevasTareas = tareas.map(t => t.id === id ? tareaActualizada : t);
       nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
       
       setTareas(nuevasTareas);
-      toast.success("¡Excelente! Tarea completada. Quedó reprogramada para mañana.");
+      toast.success("¡Excelente! Tarea completada. Quedó reprogramada.");
     } catch (error) {
       toast.error("Error al actualizar la rutina.");
     }
@@ -556,15 +553,46 @@ export default function Main({ cambiarVista, usuario }) {
       toast.error("Error al pausar la tarea.");
     }
   };
-  const calcularTiempoTarea = (fechaFutura) => {
-    if (!fechaFutura) return "";
-    const difMs = new Date(fechaFutura) - new Date();
-    if (difMs <= 0) return "⚠️ Atrasada"; // Si se te pasó la hora
+  // ==========================================
+  // NUEVO: ELIMINAR TAREA DEFINITIVAMENTE
+  // ==========================================
+  const eliminarTarea = async (idTabla) => {
+    const confirmar = window.confirm("¿Estás seguro de eliminar esta rutina definitivamente? Se borrará todo su historial.");
+    if (confirmar) {
+      try {
+        const respuesta = await fetch(`${URL_API}/tareas/${idTabla}`, { method: 'DELETE' });
+        if (!respuesta.ok) throw new Error("Fallo en servidor");
+        
+        // Lo quitamos de la pantalla instantáneamente
+        setTareas(tareas.filter((tarea) => tarea.id !== idTabla));
+        toast.error("🗑️ Rutina eliminada del sistema."); 
+      } catch (error) {
+        toast.error("Error al intentar eliminar.");
+      }
+    }
+  };
+const calcularTiempoTarea = (tarea) => {
+    if (!tarea || !tarea.proxima_ejecucion) return "";
+    
+    const fecha = new Date(tarea.proxima_ejecucion);
+    const difMs = fecha - new Date();
+    
+    if (difMs <= 0) return "⚠️ Atrasada"; 
     
     const horas = Math.floor(difMs / (1000 * 60 * 60));
     const minutos = Math.floor((difMs % (1000 * 60 * 60)) / (1000 * 60));
+    const dias = Math.floor(horas / 24);
     
-    if (horas >= 24) return `Mañana a las ${new Date(fechaFutura).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    // TRUCO SENIOR: Usamos el texto de la hora programada para que ninguna zona horaria lo altere
+    const horaExacta = tarea.hora_programada?.substring(0, 5) || "00:00";
+
+    // Si falta 1 día o más, mostramos la fecha exacta y su hora
+    if (dias >= 1) {
+        // En lugar de decir "Mañana", te dirá "🗓️ 16/3/2026 (09:00)"
+        return `🗓️ ${fecha.toLocaleDateString()} (${horaExacta})`;
+    }
+    
+    // Si es para hoy (menos de 24hs), mostramos la cuenta regresiva
     return `Faltan ${horas}h ${minutos}m`;
   };
   // NUEVO: Función para saber si la tarea ya se hizo en el día actual
@@ -601,10 +629,6 @@ export default function Main({ cambiarVista, usuario }) {
               🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areaUsuario})</span>
               <span className="badge bg-secondary ms-2">{rolUsuario.toUpperCase()}</span>
             </span>
-<<<<<<< HEAD
-=======
-           
->>>>>>> notebook-cdm
             {rolUsuario === 'admin' && (
               <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
                 👥 Usuarios
@@ -908,23 +932,30 @@ export default function Main({ cambiarVista, usuario }) {
                               {tarea.titulo}
                             </td>
                             <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
-                            <td>{tarea.frecuencia} (⏰ {tarea.hora_programada.substring(0, 5)})</td>
+                            <td>{tarea.frecuencia} (⏰ {tarea.hora_programada?.substring(0, 5)})</td>
+                           
                             <td>
                               <div className="d-flex flex-column align-items-center">
                                 <span className={`fw-bold px-2 py-1 rounded ${new Date(tarea.proxima_ejecucion) < new Date() ? 'bg-danger text-white' : 'bg-warning text-dark'}`}>
-                                  {calcularTiempoTarea(tarea.proxima_ejecucion)}
+                                  {calcularTiempoTarea(tarea)}
                                 </span>
                               </div>
                             </td>
                             {/* 5. Acciones y Botones del Cronómetro */}
                             <td>
                               {completadaHoy ? (
-                                <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
-                                  ✔️ Lista por hoy
-                                </span>
+                                <div className="d-flex justify-content-center align-items-center gap-2">
+                                  <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
+                                    ✔️ Lista por hoy
+                                  </span>
+                                  {/* Botón Eliminar cuando ya está completada */}
+                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
+                                    🗑️
+                                  </button>
+                                </div>
                               ) : (
                                 <div className="d-flex justify-content-center flex-column align-items-center gap-2">
-                                  <div className="d-flex gap-2">
+                                  <div className="d-flex gap-2 align-items-center">
                                     {/* Si está Pausada o Pendiente: Botón de INICIAR */}
                                     {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa) && (
                                       <button 
@@ -955,9 +986,18 @@ export default function Main({ cambiarVista, usuario }) {
                                     >
                                       ✅ Finalizar
                                     </button>
+
+                                    {/* NUEVO: BOTÓN DE ELIMINAR */}
+                                    <button 
+                                      className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
+                                      title="Eliminar Rutina" 
+                                      onClick={() => eliminarTarea(tarea.id)}
+                                    >
+                                      🗑️
+                                    </button>
                                   </div>
                                   
-                                  {/* NUEVO: Mostramos los minutos acumulados abajo de los botones */}
+                                  {/* Mostramos los minutos acumulados abajo de los botones */}
                                   {tarea.tiempo_acumulado_minutos > 0 && !completadaHoy && (
                                     <div className="text-muted mt-1" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
                                       ⏱️ {Math.floor(tarea.tiempo_acumulado_minutos)} min dedicados
