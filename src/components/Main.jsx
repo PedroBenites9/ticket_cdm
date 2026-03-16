@@ -6,6 +6,7 @@ import logo from '../assets/logo.png';
 import { useCarga } from '../../hooks/useCarga'; 
 import * as XLSX from 'xlsx';
 import { io } from 'socket.io-client';
+import sonidoAlerta from '../assets/alerta.mp3';
 
 const socket = io('https://back-tickets-u01r.onrender.com');
 
@@ -79,20 +80,24 @@ export default function Main({ cambiarVista, usuario }) {
     // 2. MAGIA WEBSOCKETS: Escuchamos eventos en tiempo real
     // ==================================================
     
-    // Si alguien crea un ticket, lo agregamos arriba de la lista sin recargar
+    // Si alguien crea un ticket, lo agregamos arriba de la lista y hacemos sonar la alerta
     socket.on('ticketCreado', (nuevoTicket) => {
+      
+      // 1. LÓGICA DE ALERTA SONORA (Solo suena para IT, y si lo creó otra persona)
+      if (nuevoTicket.solicitante !== usuario && (rolUsuario === 'admin' || rolUsuario === 'tecnico')) {
+        const audio = new Audio(sonidoAlerta);
+        // Usamos catch porque algunos navegadores bloquean el sonido si el usuario no ha hecho clic en la pantalla antes
+        audio.play().catch(error => console.log("El navegador bloqueó el sonido automático", error));
+      }
+
+      // 2. ACTUALIZAMOS LA PANTALLA
       setTickets((ticketsAnteriores) => {
-        // ¿Ya existe este ticket en mi tabla local?
         const yaExiste = ticketsAnteriores.some(ticket => ticket.id === nuevoTicket.id);
+        if (yaExiste) return ticketsAnteriores; 
         
-        if (yaExiste) {
-          return ticketsAnteriores; // Si ya existe (porque lo creé yo), ignoramos el mensaje
-        }
-        
-        return [nuevoTicket, ...ticketsAnteriores]; // Si no existe (lo creó otra persona), lo agregamos
+        return [nuevoTicket, ...ticketsAnteriores]; 
       });
     });
-
     // Si alguien edita o cambia de estado, actualizamos ese renglón específico
     socket.on('ticketModificado', (ticketEditado) => {
       setTickets((ticketsAnteriores) => 
