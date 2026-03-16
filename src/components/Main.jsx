@@ -6,7 +6,7 @@ import logo from '../assets/logo.png';
 import { useCarga } from '../../hooks/useCarga'; 
 import * as XLSX from 'xlsx';
 import { io } from 'socket.io-client';
-import sonidoAlerta from '../assets/alerta.mp3';
+import sonidoAlerta from '../assets/alarma.mp3';
 
 const socket = io('https://back-tickets-u01r.onrender.com');
 
