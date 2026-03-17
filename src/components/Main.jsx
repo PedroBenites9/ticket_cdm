@@ -28,8 +28,10 @@ export default function Main({ cambiarVista, usuario }) {
   const [comentarios, setComentarios] = useState([]);
   const [nuevoComentario, setNuevoComentario] = useState('');
   const finalDelChatRef = useRef(null);
+// ---> NUEVOS ESTADOS PARA NOTIFICACIONES DE CHAT <---
+  const [ticketsConMensaje, setTicketsConMensaje] = useState([]); 
+  const editandoIdRef = useRef(null); 
   
-
   // GESTIÓN DE USUARIOS
   const [usuariosLista, setUsuariosLista] = useState([]);
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
@@ -48,6 +50,9 @@ export default function Main({ cambiarVista, usuario }) {
     titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00',dias_especificos: [], // <-- NUEVO: Guardará los números de los días (Ej: [1, 3, 5])
     fecha_unica: ''       // <-- NUEVO: Guardará "2026-03-25"
   });
+  useEffect(() => {
+    editandoIdRef.current = editandoId;
+  }, [editandoId]);
 
   // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
   const URL_API = 'http://localhost:3000/api';
@@ -79,7 +84,7 @@ export default function Main({ cambiarVista, usuario }) {
     obtenerDatos();
 
     // ==================================================
-    // 2. MAGIA WEBSOCKETS: Escuchamos eventos en tiempo real
+    // 2. MAGIA WEBSOCKETS: TICKETS --> Escuchamos eventos en tiempo real
     // ==================================================
     
     // Si alguien crea un ticket, lo agregamos arriba de la lista y hacemos sonar la alerta
@@ -107,8 +112,31 @@ export default function Main({ cambiarVista, usuario }) {
       );
     });
     
+    // Antena para mensajes de la Bitácora
+    socket.on('nuevoComentario', (comentarioNuevo) => {
+      
+      // 1. Suena la alerta SOLO si el mensaje lo escribió otra persona
+      if (comentarioNuevo.autor !== usuario) {
+        const audio = new Audio(sonidoAlerta);
+        audio.play().catch(e => console.log("Audio bloqueado", e));
+      }
+
+      // 2. ¿Tengo este ticket abierto en mi pantalla ahora mismo?
+      if (editandoIdRef.current === comentarioNuevo.ticket_id) {
+        // Sí, lo tengo abierto. Actualizo el chat al instante sin recargar.
+        setComentarios(prev => [...prev, comentarioNuevo]);
+      } else {
+        // No lo tengo abierto. ¡Encendemos el puntito rojo en la tabla!
+        setTicketsConMensaje(prev => {
+          if (!prev.includes(comentarioNuevo.ticket_id)) {
+            return [...prev, comentarioNuevo.ticket_id];
+          }
+          return prev;
+        });
+      }
+    });
     // ==================================================
-    // MAGIA WEBSOCKETS: TAREAS Y RUTINAS
+    // MAGIA WEBSOCKETS: RUTINAS
     // ==================================================
     
     // Antena 1: Si alguien crea una nueva rutina
@@ -152,7 +180,8 @@ export default function Main({ cambiarVista, usuario }) {
       socket.off('tareaCreada');       
       socket.off('tareaCompletada');   
       socket.off('tareaModificada');
-      socket.off('tareaEliminada');  // <-- Apagamos antena 4
+      socket.off('tareaEliminada');
+      socket.off('nuevoComentario');
     };  
     }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
@@ -222,7 +251,7 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
-  const abrirModalEditar = (ticket) => {
+const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto,
       categoria: ticket.categoria,
@@ -234,6 +263,8 @@ export default function Main({ cambiarVista, usuario }) {
     cargarComentarios(ticket.id); 
     setNuevoComentario('');
     setMostrarModal(true);
+    // ---> NUEVO: Apagamos el puntito rojo porque ya lo leyó <---
+    setTicketsConMensaje(prev => prev.filter(id => id !== ticket.id));
   };
 
   const enviarComentario = async () => {
@@ -869,13 +900,22 @@ const calcularTiempoTarea = (tarea) => {
                             )}
                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
                               <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
-                            )}
-                            {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-                              <button className="btn btn-warning btn-sm text-white" title="Abrir y Editar" onClick={() => abrirModalEditar(ticket)}>✏️</button>
-                            )}
-                            {rolUsuario === 'admin' && (
-                              <button className="btn btn-danger btn-sm" title="Eliminar" onClick={() => eliminarTicket(ticket.id)}>🗑️</button>
-                            )}
+                            )}   
+                           {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+  <button 
+    className="btn btn-warning btn-sm text-white position-relative" 
+    title="Abrir y Editar" 
+    onClick={() => abrirModalEditar(ticket)}
+  >
+    ✏️
+    {/* MAGIA VISUAL: El puntito rojo flotante */}
+    {ticketsConMensaje.includes(ticket.id) && (
+      <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle shadow-sm" style={{ width: '12px', height: '12px' }}>
+        <span className="visually-hidden">Mensajes nuevos</span>
+      </span>
+    )}
+  </button>
+)}
                           </div>
                         )}
                       </td>
