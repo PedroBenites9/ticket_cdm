@@ -251,7 +251,7 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
-const abrirModalEditar = (ticket) => {
+  const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto,
       categoria: ticket.categoria,
@@ -327,9 +327,9 @@ const abrirModalEditar = (ticket) => {
         const ticketCreado = await respuesta.json();
         setTickets([ticketCreado, ...tickets]);
         toast.success("¡Ticket generado correctamente!"); 
-      }
-      
+      }   
       setMostrarModal(false);
+      setEditandoId(null); // <-- NUEVO: Limpiamos la memoria al guardar
     } catch (error) {
       toast.error("Hubo un problema al procesar el ticket.");
     } finally {
@@ -902,20 +902,19 @@ const calcularTiempoTarea = (tarea) => {
                               <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
                             )}   
                            {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-  <button 
-    className="btn btn-warning btn-sm text-white position-relative" 
-    title="Abrir y Editar" 
-    onClick={() => abrirModalEditar(ticket)}
-  >
-    ✏️
-    {/* MAGIA VISUAL: El puntito rojo flotante */}
-    {ticketsConMensaje.includes(ticket.id) && (
-      <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle shadow-sm" style={{ width: '12px', height: '12px' }}>
-        <span className="visually-hidden">Mensajes nuevos</span>
-      </span>
-    )}
-  </button>
-)}
+                              <button 
+                                className="btn btn-warning btn-sm text-white position-relative" 
+                                title="Abrir y Editar" 
+                                onClick={() => abrirModalEditar(ticket)}
+                              >
+                                ✏️
+                                {ticketsConMensaje.includes(ticket.id) && (
+                                  <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle shadow-sm" style={{ width: '12px', height: '12px' }}>
+                                    <span className="visually-hidden">Mensajes nuevos</span>
+                                  </span>
+                                )}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1077,7 +1076,7 @@ const calcularTiempoTarea = (tarea) => {
                 <h5 className="modal-title fw-bold text-secondary">
                   {editandoId ? "Detalles y Bitácora del Ticket" : "Reportar Incidencia de Soporte IT"}
                 </h5>
-                <button type="button" className="btn-close" onClick={() => setMostrarModal(false)}></button>
+                <button type="button" className="btn-close" onClick={() => { setMostrarModal(false); setEditandoId(null); }}></button>
               </div>
               
               <div className="modal-body">
@@ -1155,10 +1154,13 @@ const calcularTiempoTarea = (tarea) => {
                 )}
               </div>
               <div className="modal-footer bg-light" >
-                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
-                <button type="submit" form="formTicket" className="btn btn-success"disabled={esSoloLectura}>
-                  {editandoId ? "Actualizar Ticket" : "Generar Nuevo Ticket"}
-                </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => { setMostrarModal(false); setEditandoId(null); }}>Cerrar</button>              
+                  {/* 2. MAGIA UX: Solo mostramos el botón verde si estamos CREANDO un ticket nuevo, o si somos de IT */}
+                  {(!editandoId || rolUsuario !== 'final') && (
+                  <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
+                    {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
