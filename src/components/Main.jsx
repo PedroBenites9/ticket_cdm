@@ -8,8 +8,8 @@ import * as XLSX from 'xlsx';
 import { io } from 'socket.io-client';
 import sonidoAlerta from '../assets/alarma.mp3';
 
-// const socket = io('https://back-tickets-u01r.onrender.com');
-const socket = io('http://localhost:3000');
+const socket = io('https://back-tickets-u01r.onrender.com');
+// const socket = io('http://localhost:3000');
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
@@ -54,8 +54,8 @@ export default function Main({ cambiarVista, usuario }) {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
-  // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  const URL_API = 'http://localhost:3000/api';
+  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+  // const URL_API = 'http://localhost:3000/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
  let areaUsuario = localStorage.getItem('area_usuario');
   // Si no existe, o si es literalmente la palabra "undefined" o "null"
