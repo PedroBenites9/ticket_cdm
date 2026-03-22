@@ -7,56 +7,58 @@ import { useCarga } from '../../hooks/useCarga';
 import * as XLSX from 'xlsx';
 import { io } from 'socket.io-client';
 import sonidoAlerta from '../assets/alarma.mp3';
+import { useTareas } from '../../hooks/useTareas'; // Ajusta la ruta si es necesario
+import { useTickets } from '../../hooks/useTickets';
 
 const socket = io('https://back-tickets-u01r.onrender.com');
 // const socket = io('http://localhost:3000');
 
 export default function Main({ cambiarVista, usuario }) {
-  // ==========================================
-  // USO DE HOOKS
-  // ==========================================
-  const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
+   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
+  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+  // const URL_API = 'http://localhost:3000/api';
+  const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
+
+  // ---> INSTANCIAMOS EL NUEVO HOOK DE TAREAS <---
+  const {
+    tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
+    formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
+    marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
+    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy
+  } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
+
+  // ---> INSTANCIAMOS EL NUEVO HOOK DE TICKETS <--- 
+  const {
+    tickets, setTickets, cargando, setCargando, mostrarModal, setMostrarModal,
+    editandoId, setEditandoId, comentarios, setComentarios, nuevoComentario, setNuevoComentario,
+    ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
+    editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
+    manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket
+  } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
+
+ 
   // ==========================================
   // ESTADOS PARA TICKETS
   // ==========================================
-  const [tickets, setTickets] = useState([]);
-  const [cargando, setCargando] = useState(true); 
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [editandoId, setEditandoId] = useState(null); 
+
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
-  const [comentarios, setComentarios] = useState([]);
-  const [nuevoComentario, setNuevoComentario] = useState('');
-  const finalDelChatRef = useRef(null);
-// ---> NUEVOS ESTADOS PARA NOTIFICACIONES DE CHAT <---
-  const [ticketsConMensaje, setTicketsConMensaje] = useState([]); 
-  const editandoIdRef = useRef(null); 
-  
+
   // GESTIÓN DE USUARIOS
   const [usuariosLista, setUsuariosLista] = useState([]);
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
 
-  // NUEVO: Agregamos tipo_origen al formulario inicial
-  const [formulario, setFormulario] = useState({
-    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno'
-  });
+
   // ==========================================
   // ESTADOS PARA RUTINAS DIARIAS (Mantenimiento)
   // ==========================================
   const [pestañaActual, setPestañaActual] = useState('tickets'); // Controla si vemos 'tickets' o 'tareas'
-  const [tareas, setTareas] = useState([]);
-  const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
-  const [formularioTarea, setFormularioTarea] = useState({
-    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00',dias_especificos: [], // <-- NUEVO: Guardará los números de los días (Ej: [1, 3, 5])
-    fecha_unica: ''       // <-- NUEVO: Guardará "2026-03-25"
-  });
+``
   useEffect(() => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
-  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  // const URL_API = 'http://localhost:3000/api';
-  const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
  let areaUsuario = localStorage.getItem('area_usuario');
   // Si no existe, o si es literalmente la palabra "undefined" o "null"
   if (!areaUsuario || areaUsuario === 'undefined' || areaUsuario === 'null') {
@@ -64,7 +66,7 @@ export default function Main({ cambiarVista, usuario }) {
   } // <-- NUEVO
 // NUEVO: Identificamos si el ticket abierto está bloqueado
   const ticketAbierto = tickets.find(t => t.id === editandoId);
-  const esSoloLectura = ticketAbierto?.estado === 'Cerrado Definitivo';
+
 
   useEffect(() => {
     // 1. Carga inicial tradicional (una sola vez)
@@ -201,45 +203,6 @@ export default function Main({ cambiarVista, usuario }) {
     return () => clearInterval(intervalo); 
   }, [editandoId]);
 
-  const obtenerColorEstado = (estado) => {
-    if (estado === 'Abierto') return 'bg-danger';
-    if (estado === 'En Proceso') return 'bg-warning text-dark';
-    if (estado === 'Resuelto') return 'bg-success';
-    if (estado === 'Cerrado Definitivo') return 'bg-dark text-white';
-    return 'bg-secondary';
-  };
-  // ==========================================
-  // NUEVO: Calcular cuenta regresiva (SLA de 5 días)
-  // ==========================================
-  const calcularTiempoRestante = (fechaFinalizado) => {
-    if (!fechaFinalizado) return "";
-    
-    const fechaFin = new Date(fechaFinalizado);
-    fechaFin.setDate(fechaFin.getDate() + 5); // Le sumamos 5 días a la fecha de resolución
-    
-    const ahora = new Date();
-    const diferenciaMs = fechaFin - ahora;
-
-    if (diferenciaMs <= 0) return "Cierre inminente"; // Si el backend tarda en cerrarlo
-
-    // Convertimos los milisegundos a días y horas
-    const dias = Math.floor(diferenciaMs / (1000 * 60 * 60 * 24));
-    const horas = Math.floor((diferenciaMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-    if (dias > 0) return `${dias}d ${horas}h restantes`;
-    return `${horas}h restantes`;
-  };
-
-  const manejarCambio = (e) => {
-    setFormulario({ ...formulario, [e.target.name]: e.target.value });
-  };
-
-  const abrirModalCrear = () => {
-    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno' });
-    setEditandoId(null);
-    setComentarios([]); 
-    setMostrarModal(true);
-  };
 
   const cargarComentarios = async (idTicket) => {
     try {
@@ -251,145 +214,6 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
 
-  const abrirModalEditar = (ticket) => {
-    setFormulario({
-      asunto: ticket.asunto,
-      categoria: ticket.categoria,
-      prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion,
-      tipo_origen: ticket.tipo_origen || 'Interno'
-    });
-    setEditandoId(ticket.id);
-    cargarComentarios(ticket.id); 
-    setNuevoComentario('');
-    setMostrarModal(true);
-    // ---> NUEVO: Apagamos el puntito rojo porque ya lo leyó <---
-    setTicketsConMensaje(prev => prev.filter(id => id !== ticket.id));
-  };
-
-  const enviarComentario = async () => {
-    if (!nuevoComentario.trim()) return; 
-    try {
-      const respuesta = await fetch(`${URL_API}/tickets/${editandoId}/comentarios`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ autor: usuario, texto: nuevoComentario })
-      });
-      const comentarioCreado = await respuesta.json();
-      setComentarios([...comentarios, comentarioCreado]); 
-      setNuevoComentario(''); 
-    } catch (error) {
-      toast.error("Error al guardar la nota.");
-    }
-  };
-
-  const guardarTicket = async (e) => {
-    e.preventDefault();
-    mostrarCarga();
-    
-    try {
-      // 1. EL TRUCO: Aseguramos tener el nombre (lee la variable o la memoria local)
-      const nombreReal = usuario || localStorage.getItem('nombre_usuario') || 'Usuario Desconocido';
-
-      // 2. ARMAMOS EL PAQUETE MAESTRO (Sirve tanto para crear como para editar)
-      const paqueteAEnviar = {
-        ...formulario, 
-        solicitante: nombreReal 
-      };
-
-      if (editandoId) {
-        // --- MODO EDICIÓN (PUT) ---
-        // Actualizado a la ruta correcta de tu backend (/tickets/editar/:id)
-        const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paqueteAEnviar) 
-        }); 
-
-        if (!respuesta.ok) throw new Error("El servidor rechazó la edición del ticket");
-        
-        const ticketActualizado = await respuesta.json();
-        const ticketsNuevos = tickets.map(t => t.id === editandoId ? ticketActualizado : t);
-        setTickets(ticketsNuevos);
-        toast.success("¡Ticket actualizado correctamente!");
-
-      } else {
-        // --- MODO CREACIÓN (POST) ---
-        const respuesta = await fetch(`${URL_API}/tickets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // ¡AQUÍ ESTABA EL ERROR! Ahora enviamos el paquete con el solicitante incluido
-          body: JSON.stringify(paqueteAEnviar)
-        });
-
-        if (!respuesta.ok) throw new Error("El servidor rechazó el nuevo ticket");
-
-        const ticketCreado = await respuesta.json();
-        setTickets([ticketCreado, ...tickets]);
-        toast.success("¡Ticket generado correctamente!"); 
-      }   
-      setMostrarModal(false);
-      setEditandoId(null); // <-- NUEVO: Limpiamos la memoria al guardar
-    } catch (error) {
-      toast.error("Hubo un problema al procesar el ticket.");
-    } finally {
-      ocultarCarga();
-    }
-  };
-
-  const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
-    try {
-      const respuesta = await fetch(`${URL_API}/tickets/${idTabla}/estado`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: nuevoEstado })
-      });
-      if (!respuesta.ok) throw new Error("Fallo en servidor");
-      
-      // NUEVO: Atrapamos el ticket completo que devuelve PostgreSQL con la fecha exacta
-      const ticketActualizadoBD = await respuesta.json(); 
-
-      const ticketsActualizados = tickets.map((ticket) => {
-        if (ticket.id === idTabla) return ticketActualizadoBD; // Reemplazamos con los datos frescos
-        return ticket;
-      });
-      setTickets(ticketsActualizados);
-      toast.success(nuevoEstado === 'Resuelto' ? "¡Ticket Finalizado! Comienza cuenta regresiva de 5 días." : "Estado actualizado");
-    } catch (error) {
-      toast.error("Error al cambiar el estado.");
-    }
-  };
-  const asignarmeTicket = async (idTabla) => {
-    try {
-      await fetch(`${URL_API}/tickets/asignar/${idTabla}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tecnico: usuario })
-      });
-      const ticketsActualizados = tickets.map((t) =>
-        t.id === idTabla ? { ...t, tecnico_asignado: usuario } : t
-      );
-      setTickets(ticketsActualizados);
-      toast.success("Te has asignado este ticket.");
-    } catch (error) {
-      toast.error("Error al asignarse el ticket.");
-    }
-  };
-
-  const eliminarTicket = async (idTabla) => {
-    const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
-    if (confirmar) {
-      try {
-        const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
-        if (!respuesta.ok) throw new Error("Fallo en servidor");
-        const ticketsRestantes = tickets.filter((ticket) => ticket.id !== idTabla);
-        setTickets(ticketsRestantes);
-        toast.error("Ticket eliminado del sistema."); 
-      } catch (error) {
-        toast.error("Error al intentar eliminar.");
-      }
-    }
-  };
 
   const exportarAExcel = () => {
     const datosParaExcel = ticketsFiltrados.map(ticket => ({
@@ -413,38 +237,7 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // NUEVO: Exportar Historial de Tareas a Excel
   // ==========================================
-  const exportarHistorialTareas = async () => {
-    try {
-      const respuesta = await fetch(`${URL_API}/tareas/historial`);
-      const datosHistorial = await respuesta.json();
-
-      if (datosHistorial.length === 0) {
-        toast.error("Aún no hay tareas completadas para exportar.");
-        return;
-      }
-
-      const datosParaExcel = datosHistorial.map(registro => ({
-        "ID Tarea": registro.tarea_id,
-        "Rutina Realizada": registro.titulo_tarea,
-        "Completado Por": registro.usuario_que_completo,
-        "Fecha de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleDateString() : 'Sin registro',
-        "Hora de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleTimeString() : 'Sin registro',
-        "Fecha de Finalización": new Date(registro.fecha_completada).toLocaleDateString(),
-        "Hora de Finalización": new Date(registro.fecha_completada).toLocaleTimeString(),
-        "Tiempo de Ejecución Real": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : 'Sin registro'
-      }));  
-
-      const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
-      const libro = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(libro, hoja, "Métricas de Rutinas");
-      XLSX.writeFile(libro, "Métricas_Mantenimiento_CruzDeMalta.xlsx");
-      
-      toast.success("¡Reporte de métricas descargado!");
-    } catch (error) {
-      toast.error("Error al generar el Excel de tareas.");
-    }
-  };
-
+  
   const abrirPanelUsuarios = async () => {
     try {
       const respuesta = await fetch(`${URL_API}/usuarios`);
@@ -509,140 +302,7 @@ export default function Main({ cambiarVista, usuario }) {
     cantidad: conteoCategorias[key]
   }));
   
-  // ==========================================
-  // FUNCIONES DE RUTINAS DIARIAS
-  // ==========================================
-
-  // NUEVO: Función para tildar y destildar días de la semana
-  const manejarDias = (diaId) => {
-    const { dias_especificos } = formularioTarea;
-    if (dias_especificos.includes(diaId)) {
-      // Si ya estaba tildado, lo quitamos
-      setFormularioTarea({ ...formularioTarea, dias_especificos: dias_especificos.filter(d => d !== diaId) });
-    } else {
-      // Si no estaba, lo agregamos
-      setFormularioTarea({ ...formularioTarea, dias_especificos: [...dias_especificos, diaId] });
-    }
-  };
-
- const guardarTarea = async (e) => {
-    e.preventDefault();
-    mostrarCarga(); // Siempre es buena idea mostrar el loader
-    try {
-      // EL FRONTEND ES TONTO: Solo toma lo que el usuario completó en el formulario y se lo lanza al Backend
-      const respuesta = await fetch(`${URL_API}/tareas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formularioTarea) 
-      });
-      
-      const tareaCreada = await respuesta.json();
-      
-      setTareas([...tareas, tareaCreada].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion)));
-      setMostrarModalTarea(false);
-      toast.success("¡Rutina programada con éxito!");
-    } catch (error) {
-      toast.error("Error al crear la rutina.");
-    } finally {
-      ocultarCarga();
-    }
-  };
-const marcarTareaCompletada = async (id) => {
-    try {
-      const respuesta = await fetch(`${URL_API}/tareas/${id}/completar`, { 
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario: usuario }) 
-      });
-
-      // ---> ¡ESTE ES EL ESCUDO ANTI-BUGS! <---
-      if (!respuesta.ok) {
-        throw new Error("El servidor falló al completar la tarea");
-      }
-
-      const tareaActualizada = await respuesta.json();
-      
-      const nuevasTareas = tareas.map(t => t.id === id ? tareaActualizada : t);
-      nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
-      
-      setTareas(nuevasTareas);
-      toast.success("¡Excelente! Tarea completada. Quedó reprogramada.");
-    } catch (error) {
-      toast.error("Error al actualizar la rutina.");
-    }
-  };
-  // ==========================================
-  // NUEVO: FUNCIONES DEL CRONÓMETRO
-  // ==========================================
-  const iniciarTarea = async (id) => {
-    try {
-      await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
-      toast.success("▶ Cronómetro iniciado. ¡A trabajar!");
-    } catch (error) {
-      toast.error("Error al iniciar la tarea.");
-    }
-  };
-
-  const pausarTarea = async (id) => {
-    try {
-      await fetch(`${URL_API}/tareas/${id}/pausar`, { method: 'PUT' });
-      toast.warning("⏸ Tarea pausada. El tiempo se ha guardado.");
-    } catch (error) {
-      toast.error("Error al pausar la tarea.");
-    }
-  };
-  // ==========================================
-  // NUEVO: ELIMINAR TAREA DEFINITIVAMENTE
-  // ==========================================
-  const eliminarTarea = async (idTabla) => {
-    const confirmar = window.confirm("¿Estás seguro de eliminar esta rutina definitivamente? Se borrará todo su historial.");
-    if (confirmar) {
-      try {
-        const respuesta = await fetch(`${URL_API}/tareas/${idTabla}`, { method: 'DELETE' });
-        if (!respuesta.ok) throw new Error("Fallo en servidor");
-        
-        // Lo quitamos de la pantalla instantáneamente
-        setTareas(tareas.filter((tarea) => tarea.id !== idTabla));
-        toast.error("🗑️ Rutina eliminada del sistema."); 
-      } catch (error) {
-        toast.error("Error al intentar eliminar.");
-      }
-    }
-  };
-const calcularTiempoTarea = (tarea) => {
-    if (!tarea || !tarea.proxima_ejecucion) return "";
-    
-    const fecha = new Date(tarea.proxima_ejecucion);
-    const difMs = fecha - new Date();
-    
-    if (difMs <= 0) return "⚠️ Atrasada"; 
-    
-    const horas = Math.floor(difMs / (1000 * 60 * 60));
-    const minutos = Math.floor((difMs % (1000 * 60 * 60)) / (1000 * 60));
-    const dias = Math.floor(horas / 24);
-    
-    // TRUCO SENIOR: Usamos el texto de la hora programada para que ninguna zona horaria lo altere
-    const horaExacta = tarea.hora_programada?.substring(0, 5) || "00:00";
-
-    // Si falta 1 día o más, mostramos la fecha exacta y su hora
-    if (dias >= 1) {
-        // En lugar de decir "Mañana", te dirá "🗓️ 16/3/2026 (09:00)"
-        return `🗓️ ${fecha.toLocaleDateString()} (${horaExacta})`;
-    }
-    
-    // Si es para hoy (menos de 24hs), mostramos la cuenta regresiva
-    return `Faltan ${horas}h ${minutos}m`;
-  };
-  // NUEVO: Función para saber si la tarea ya se hizo en el día actual
-  const fueCompletadaHoy = (fechaString) => {
-    if (!fechaString) return false;
-    const fechaCompletada = new Date(fechaString);
-    const hoy = new Date();
-    return fechaCompletada.getDate() === hoy.getDate() &&
-           fechaCompletada.getMonth() === hoy.getMonth() &&
-           fechaCompletada.getFullYear() === hoy.getFullYear();
-  };
-
+  
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
       <header className="navbar navbar-dark bg-dark shadow-sm position-relative">
@@ -965,8 +625,8 @@ const calcularTiempoTarea = (tarea) => {
                    {tareas.length > 0 ? (
                       tareas.map(tarea => {
                         // Verificamos si la tarea ya se completó hoy
-                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
-
+                       const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
+                        // console.log(completadaHoy);
                         return (
                           <tr 
                             key={tarea.id} 
