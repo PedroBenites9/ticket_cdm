@@ -24,7 +24,7 @@ export default function Main({ cambiarVista, usuario }) {
     tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
     marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
-    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy
+    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
   // ---> INSTANCIAMOS EL NUEVO HOOK DE TICKETS <--- 
@@ -48,13 +48,58 @@ export default function Main({ cambiarVista, usuario }) {
   // GESTIÓN DE USUARIOS
   const [usuariosLista, setUsuariosLista] = useState([]);
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
-
-
   // ==========================================
   // ESTADOS PARA RUTINAS DIARIAS (Mantenimiento)
   // ==========================================
   const [pestañaActual, setPestañaActual] = useState('tickets'); // Controla si vemos 'tickets' o 'tareas'
-``
+
+  // ====================================================
+  // NUEVO: GUARDIÁN DE SESIÓN (Sobrevive al F5 y dura 15 min)
+  // ====================================================
+  const cerrarSesionAuto = () => {
+    localStorage.removeItem('token_acceso'); 
+    localStorage.removeItem('nombre_usuario');
+    localStorage.removeItem('rol_usuario');
+    localStorage.removeItem('area_usuario');
+    localStorage.removeItem('horaLogin'); // Borramos el reloj
+    
+    // Le avisamos al usuario y lo mandamos al login
+    toast.warning("⏱️ Tu sesión ha expirado por seguridad.");
+    cambiarVista('login');
+  };
+
+  useEffect(() => {
+    const horaGuardada = localStorage.getItem('horaLogin');
+
+    if (horaGuardada) {
+      const tiempoActual = new Date().getTime();
+      const tiempoPasado = tiempoActual - parseInt(horaGuardada);
+      
+      const limiteTiempo = 15 * 60 * 1000; // 15 minutos exactos en milisegundos
+
+      if (tiempoPasado < limiteTiempo) {
+        // AÚN TIENE TIEMPO: Programamos el cierre automático para lo que le reste
+        const tiempoRestante = limiteTiempo - tiempoPasado;
+        const temporizador = setTimeout(() => {
+          cerrarSesionAuto();
+        }, tiempoRestante);
+
+        // Limpiamos el cronómetro si cambia de vista antes de que acabe
+        return () => clearTimeout(temporizador);
+      } else {
+        // YA PASÓ EL TIEMPO: Lo sacamos inmediatamente
+        cerrarSesionAuto();
+      }
+    } else {
+      // Si entró a Main pero no tiene hora registrada, arranca el cronómetro ahora
+      localStorage.setItem('horaLogin', new Date().getTime());
+    }
+  }, []); 
+  // ====================================================
+
+  useEffect(() => {
+    editandoIdRef.current = editandoId;
+  }, [editandoId]);
   useEffect(() => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
@@ -337,6 +382,7 @@ export default function Main({ cambiarVista, usuario }) {
               localStorage.removeItem('token_acceso'); 
               localStorage.removeItem('nombre_usuario');
               localStorage.removeItem('rol_usuario');
+              localStorage.removeItem('horaLogin');
               cambiarVista('login');
             }}>
               Salir
@@ -604,9 +650,12 @@ export default function Main({ cambiarVista, usuario }) {
                     📊 Descargar Historial
                   </button>
                 )}
-                <button className="btn btn-primary shadow-sm" onClick={() => { setFormularioTarea({titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00',dias_especificos: [], fecha_unica: ''}); setMostrarModalTarea(true); }}>
-                  + Nueva Rutina
-                </button>
+                <button className="btn btn-primary shadow-sm" onClick={() => { 
+  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
+  setMostrarModalTarea(true); 
+}}>
+  + Nueva Rutina
+</button>
               </div>
             
             <div className="card shadow-sm border-0">
@@ -617,7 +666,7 @@ export default function Main({ cambiarVista, usuario }) {
                       <th>Rutina a realizar</th>
                       <th>Categoría</th>
                       <th>Frecuencia</th>
-                      <th>Estado / Cuenta Regresiva</th>
+                      <th>Próxima Ejecución</th>
                       <th>Acción</th>
                     </tr>
                   </thead>
@@ -626,6 +675,7 @@ export default function Main({ cambiarVista, usuario }) {
                       tareas.map(tarea => {
                         // Verificamos si la tarea ya se completó hoy
                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
+                       const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
                         // console.log(completadaHoy);
                         return (
                           <tr 
@@ -638,7 +688,9 @@ export default function Main({ cambiarVista, usuario }) {
                               {tarea.titulo}
                             </td>
                             <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
-                            <td>{tarea.frecuencia} (⏰ {tarea.hora_programada?.substring(0, 5)})</td>
+                            <td className="text-secondary fw-semibold">
+                              {formatearFrecuenciaTexto(tarea)} <span className="text-dark fw-normal">(⏰ {tarea.hora_programada?.substring(0, 5)})</span>
+                            </td>
                            
                             <td>
                               <div className="d-flex flex-column align-items-center">
@@ -659,7 +711,15 @@ export default function Main({ cambiarVista, usuario }) {
                                     🗑️
                                   </button>
                                 </div>
-                              ) : (
+                              ) : tareaFutura ? (
+                                /* NUEVO: SI ES DEL FUTURO, MOSTRAMOS UN RELOJ DE ARENA EN LUGAR DE LOS BOTONES */
+                                <div className="d-flex justify-content-center align-items-center gap-2">
+                                  <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
+                                    ⏳ Esperando fecha
+                                  </span>
+                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>🗑️</button>
+                                </div>
+                              ):(
                                 <div className="d-flex justify-content-center flex-column align-items-center gap-2">
                                   <div className="d-flex gap-2 align-items-center">
                                     {/* Si está Pausada o Pendiente: Botón de INICIAR */}
@@ -692,7 +752,13 @@ export default function Main({ cambiarVista, usuario }) {
                                     >
                                       ✅ Finalizar
                                     </button>
-
+                                    <button 
+                                      className="btn btn-outline-warning btn-sm shadow-sm ms-1" 
+                                      title="Editar Rutina" 
+                                      onClick={() => abrirModalEditarTarea(tarea)}
+                                    >
+                                      ✏️
+                                    </button>
                                     {/* NUEVO: BOTÓN DE ELIMINAR */}
                                     <button 
                                       className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
@@ -898,17 +964,15 @@ export default function Main({ cambiarVista, usuario }) {
                       <option value="Limpieza / General">🧹 Limpieza e Instalaciones</option>
                       <option value="CCTV y Servidores">📹 CCTV y Servidores</option>
                       <option value="Redes">🌐 Mantenimiento de Red</option>
+                      <option value="Reportes"> 📑 Reportes</option>
                     </select>
                   </div>
                  <div className="row">
                     <div className="col-6 mb-3">
                       <label className="form-label fw-bold">Frecuencia</label>
                       <select className="form-select" value={formularioTarea.frecuencia} onChange={(e) => setFormularioTarea({...formularioTarea, frecuencia: e.target.value})}>
-                        <option value="Diaria">Diaria</option>
-                        <option value="Semanal">Semanal</option>
-                        <option value="Mensual">Mensual</option>
                         <option value="Dias Especificos" className="fw-bold text-primary">📅 Días Específicos</option>
-                        <option value="Fecha Unica" className="fw-bold text-success">🎯 Fecha Única</option>
+                        <option value="Fecha Unica" className="fw-bold text-success">🎯 Tarea Mensual</option>
                       </select>
                     </div>
                     <div className="col-6 mb-3">

@@ -24,17 +24,26 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     e.preventDefault();
     mostrarCarga();
     try {
-      const respuesta = await fetch(`${URL_API}/tareas`, {
-        method: 'POST',
+      const esEdicion = formularioTarea.id; // ¿Tiene ID? Entonces es edición
+      const url = esEdicion ? `${URL_API}/tareas/${formularioTarea.id}` : `${URL_API}/tareas`;
+      const metodo = esEdicion ? 'PUT' : 'POST';
+
+      const respuesta = await fetch(url, {
+        method: metodo,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formularioTarea) 
+        body: JSON.stringify(formularioTarea)
       });
-      const tareaCreada = await respuesta.json();
-      setTareas(prev => [...prev, tareaCreada].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion)));
-      setMostrarModalTarea(false);
-      toast.success("¡Rutina programada con éxito!");
+
+      if (respuesta.ok) {
+        toast.success(esEdicion ? "¡Rutina actualizada!" : "¡Nueva rutina creada!");
+        setMostrarModalTarea(false);
+        // Limpiamos el formulario (incluyendo el ID a null)
+        setFormularioTarea({ id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: '' });
+      } else {
+        toast.error("Error al guardar la tarea.");
+      }
     } catch (error) {
-      toast.error("Error al crear la rutina.");
+      toast.error("Error de conexión al servidor.");
     } finally {
       ocultarCarga();
     }
@@ -50,7 +59,6 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
       if (!respuesta.ok) throw new Error("El servidor falló al completar la tarea");
       
       const tareaActualizada = await respuesta.json();
-      console.log("🕵️‍♂️ TAREA QUE LLEGÓ DEL BACKEND:", tareaActualizada);
       setTareas(prev => {
         const nuevasTareas = prev.map(t => t.id === id ? tareaActualizada : t);
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
@@ -68,6 +76,21 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     } catch (error) {
       toast.error("Error al iniciar la tarea.");
     }
+  };
+
+// NUEVO: Función para saber si la tarea está programada para mañana o más adelante
+  const esTareaFutura = (fechaString) => {
+    if (!fechaString) return false;
+    
+    const fechaTarea = new Date(fechaString);
+    const hoy = new Date();
+    
+    // Igualamos las horas a cero para comparar solo los días en el calendario
+    fechaTarea.setHours(0, 0, 0, 0);
+    hoy.setHours(0, 0, 0, 0);
+    
+    // Si el día de la tarea es mayor al día de hoy, es del futuro
+    return fechaTarea > hoy;
   };
 
   const pausarTarea = async (id) => {
@@ -145,6 +168,51 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
            fechaCompletada.getFullYear() === hoy.getFullYear();
   };
 
+  // NUEVO: Traductor visual para la columna de Frecuencia
+  const formatearFrecuenciaTexto = (tarea) => {
+    // Si eligieron días específicos, traducimos los números a texto
+    if (tarea.frecuencia === 'Dias Especificos') {
+      try {
+        // Nos aseguramos de que sea un array (dependiendo de cómo lo envíe PostgreSQL)
+        const dias = typeof tarea.dias_especificos === 'string' 
+            ? JSON.parse(tarea.dias_especificos) 
+            : tarea.dias_especificos;
+            
+        if (!Array.isArray(dias) || dias.length === 0) return "Días sin asignar";
+
+        const MAPA_DIAS = { 0: 'Dom', 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb' };
+        return dias.map(d => MAPA_DIAS[d]).join(', '); // Ej: "Lun, Mié, Vie"
+      } catch (e) {
+        return "Días específicos";
+      }
+    }
+    
+    // Si eligieron una fecha única, la formateamos a DD/MM/YYYY
+    if (tarea.frecuencia === 'Fecha Unica' && tarea.fecha_unica) {
+      // Extraemos solo la parte YYYY-MM-DD para evitar problemas de zonas horarias
+      const fechaLimpia = tarea.fecha_unica.split('T')[0]; 
+      const [año, mes, dia] = fechaLimpia.split('-');
+      return `${dia}/${mes}/${año}`;
+    }
+
+    // Si es Diaria, Semanal o Mensual, devolvemos el texto normal
+    return tarea.frecuencia;
+  };
+
+  const abrirModalEditarTarea = (tarea) => {
+  // Cargamos los datos exactos de la tarea en el formulario
+  setFormularioTarea({
+    id: tarea.id, // ¡Clave! El ID nos dirá que estamos editando
+    titulo: tarea.titulo,
+    categoria: tarea.categoria,
+    frecuencia: tarea.frecuencia,
+    hora_programada: tarea.hora_programada,
+    dias_especificos: tarea.dias_especificos || [],
+    fecha_unica: tarea.fecha_unica ? tarea.fecha_unica.split('T')[0] : ''
+  });
+  setMostrarModalTarea(true);
+};
+
   // 3. EXPORTAMOS LO QUE MAIN.JSX NECESITA
   return {
     tareas, setTareas,
@@ -152,6 +220,6 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     formularioTarea, setFormularioTarea,
     manejarDias, guardarTarea, marcarTareaCompletada,
     iniciarTarea, pausarTarea, eliminarTarea,
-    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy
+    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea
   };
 };

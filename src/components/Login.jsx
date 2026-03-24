@@ -21,6 +21,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
   const manejarIngreso = async (e) => {
     e.preventDefault();
     mostrarCarga();
+    
     try {
       // Usamos la URL de producción de Render
       const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/login', {
@@ -31,11 +32,20 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
 
       const datos = await respuesta.json();
 
-   if (respuesta.ok) {
+      if (respuesta.ok) {
+        // === GUARDADO DE SESIÓN VIP ===
+        localStorage.setItem('token_acceso', datos.token); // Por si tu backend envía token JWT
+        localStorage.setItem('nombre_usuario', datos.usuario.nombre);
         localStorage.setItem('rol_usuario', datos.usuario.rol); 
-        localStorage.setItem('area_usuario', datos.usuario.area); // <-- NUEVO        
+        localStorage.setItem('area_usuario', datos.usuario.area); 
+        
+        // ¡LA LLAVE MAESTRA! Guardamos la hora exacta en la que entró
+        localStorage.setItem('horaLogin', new Date().getTime().toString());
+        
         setUsuarioActual(datos.usuario.nombre);
         toast.success(`¡Bienvenido de nuevo, ${datos.usuario.nombre}!`);
+        
+        // Navegamos al sistema principal
         cambiarVista('main');
       } else {
         toast.error(datos.error || "Credenciales incorrectas.");
@@ -43,27 +53,24 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
     } catch (error) {
       console.error("Error de conexión:", error);
       toast.error("No se pudo conectar con el servidor.");
-    }finally{
+    } finally {
       ocultarCarga();
     }
   };
 
   // ==========================================
-  // NUEVO DISEÑO CON FONDO Y LOGO
+  // DISEÑO CON FONDO Y LOGO
   // ==========================================
   return (
-    // 1. Contenedor principal que ocupa toda la pantalla y tiene el fondo degradado
     <div style={{ 
-      minHeight: '100vh', // Asegura que ocupe el 100% del alto de la pantalla
+      minHeight: '100vh',
       width: '100%',
-      // Un degradado profesional de azul marino oscuro a un tono un poco más claro
       background: 'linear-gradient(360deg, #0a192f 0%, #1353acff 100%)',
       display: 'flex',
-      alignItems: 'center', // Centra verticalmente el contenido
-      justifyContent: 'center' // Centra horizontalmente
+      alignItems: 'center',
+      justifyContent: 'center'
     }}>
       
-      {/* Tu componente animado original (le quitamos el mt-5 porque ya lo centramos con flexbox arriba) */}
       <motion.div 
         className="container" 
         initial={{ opacity: 0, y: -20 }} 
@@ -73,16 +80,13 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
         <div className="row justify-content-center">
           <div className="col-md-4 text-center">
             
-            {/* Tarjeta blanca del formulario */}
             <div className="card shadow-lg p-4 border-0 rounded-3">
-               {/* 2. NUEVO: La Imagen del Logo Centrada */}
               <img 
                 src={logo} 
                 alt="Logo de la empresa" 
-                className="d-block mx-auto mb-4 img-fluid" // Clases Bootstrap para centrar
-                style={{ maxWidth: '320px', height: 'auto' }} // Controla que no sea gigante
+                className="d-block mx-auto mb-4 img-fluid"
+                style={{ maxWidth: '320px', height: 'auto' }}
               />
-             
 
               <h2 className="mb-4 fw-bold text-dark">Iniciar Sesión</h2>
               
