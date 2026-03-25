@@ -11,9 +11,8 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [ticketsConMensaje, setTicketsConMensaje] = useState([]);
   const [formulario, setFormulario] = useState({
-    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno'
+    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:''
   });
-
   // REFERENCIAS
   const editandoIdRef = useRef(null);
   const finalDelChatRef = useRef(null);
@@ -64,7 +63,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const manejarCambio = (e) => setFormulario({ ...formulario, [e.target.name]: e.target.value });
 
   const abrirModalCrear = () => {
-    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno' });
+    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:''});
     setEditandoId(null);
     setComentarios([]);
     setMostrarModal(true);
@@ -83,7 +82,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto, categoria: ticket.categoria, prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen || 'Interno'
+      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen || 'Interno', cliente: ticket.cliente || ''
     });
     setEditandoId(ticket.id);
     cargarComentarios(ticket.id);
@@ -114,7 +113,6 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     try {
       const nombreReal = usuario || localStorage.getItem('nombre_usuario') || 'Usuario Desconocido';
       const paqueteAEnviar = { ...formulario, solicitante: nombreReal };
-
       if (editandoId) {
         const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },

@@ -36,7 +36,6 @@ export default function Main({ cambiarVista, usuario }) {
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
     guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket
   } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
-
  
   // ==========================================
   // ESTADOS PARA TICKETS
@@ -44,6 +43,8 @@ export default function Main({ cambiarVista, usuario }) {
 
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
+  const [clientesLista, setClientesLista] = useState([]);
+  const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
 
   // GESTIÓN DE USUARIOS
   const [usuariosLista, setUsuariosLista] = useState([]);
@@ -119,7 +120,8 @@ export default function Main({ cambiarVista, usuario }) {
       try {
         const respuestaTickets = await fetch(`${URL_API}/tickets`);
         setTickets(await respuestaTickets.json());
-
+const respuestaClientes = await fetch(`${URL_API}/clientes`);
+        setClientesLista(await respuestaClientes.json());
         const respuestaTareas = await fetch(`${URL_API}/tareas`);
         setTareas(await respuestaTareas.json());
       } catch (error) {
@@ -130,6 +132,7 @@ export default function Main({ cambiarVista, usuario }) {
     };
     obtenerDatos();
 
+  
     // ==================================================
     // 2. MAGIA WEBSOCKETS: TICKETS --> Escuchamos eventos en tiempo real
     // ==================================================
@@ -219,6 +222,18 @@ export default function Main({ cambiarVista, usuario }) {
     socket.on('tareaEliminada', (idTareaEliminada) => {
       setTareas((tareasAnteriores) => tareasAnteriores.filter(t => t.id !== idTareaEliminada));
     });
+    // NUEVO: Escuchar cuando alguien crea un cliente externo nuevo
+    socket.on('clienteCreado', (nuevoCliente) => {
+      setClientesLista((prevLista) => {
+        // Verificamos que no esté duplicado por las dudas
+        const existe = prevLista.find(c => c.id === nuevoCliente.id);
+        if (existe) return prevLista;
+        
+        // Lo agregamos a la lista y la re-ordenamos alfabéticamente
+        const listaActualizada = [...prevLista, nuevoCliente];
+        return listaActualizada.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      });
+    });
 
     // Y recuerda apagarla en el return de limpieza que está justo abajo:
     return () => {
@@ -229,6 +244,7 @@ export default function Main({ cambiarVista, usuario }) {
       socket.off('tareaModificada');
       socket.off('tareaEliminada');
       socket.off('nuevoComentario');
+      socket.off('clienteCreado');
     };  
     }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
 
@@ -265,6 +281,7 @@ export default function Main({ cambiarVista, usuario }) {
       "Código": ticket.codigo,
       "Asunto": ticket.asunto,
       "Origen": ticket.tipo_origen || 'Interno',
+      "Cliente / Solicitante": ticket.tipo_origen === 'Externo' ? (ticket.cliente || 'Sin cliente') : (ticket.solicitante || 'Usuario'),
       "Categoría": ticket.categoria,
       "Prioridad": ticket.prioridad,
       "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
@@ -318,9 +335,10 @@ export default function Main({ cambiarVista, usuario }) {
       permisoVer = ticket.solicitante === usuario; 
     }
     const coincideBusqueda = 
-  ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
-  ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-  ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase());
+    ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
+    ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    (ticket.cliente && ticket.cliente.toLowerCase().includes(busqueda.toLowerCase()));
     const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
     return permisoVer && coincideCategoria;
   });
@@ -347,6 +365,11 @@ export default function Main({ cambiarVista, usuario }) {
     cantidad: conteoCategorias[key]
   }));
   
+  // Función limpia para manejar el botón de nuevo ticket
+  const manejarNuevoTicket = () => {
+    abrirModalCrear(); // Llamamos a tu función del Hook que limpia el formulario
+    setIngresandoNuevoCliente(false); // Apagamos el cuadrito de texto
+  };
   
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
@@ -427,7 +450,10 @@ export default function Main({ cambiarVista, usuario }) {
                 📊 Descargar Excel
               </button>
             )}
-            <button className="btn btn-primary shadow-sm" onClick={abrirModalCrear}>
+            <button 
+              className="btn btn-primary" 
+              onClick={manejarNuevoTicket}
+            >
               + Nuevo Ticket
             </button>
           </div>
@@ -535,7 +561,7 @@ export default function Main({ cambiarVista, usuario }) {
                   <th>Código</th>
                   <th>Origen</th>
                   {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-                    <th>Solicitante</th>
+                  <th>Solicitante / Cliente</th>
                   )}
                   <th>Asunto</th>
                   <th>Categoría</th>
@@ -559,9 +585,14 @@ export default function Main({ cambiarVista, usuario }) {
                           {ticket.tipo_origen || 'Interno'}
                         </span>
                       </td>
-                      {/* 3. Solicitante (Visible para Admin y Técnicos) */}
-                      {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-                        <td>{ticket.solicitante || 'Usuario'}</td>
+                        {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                        <td>
+                          {ticket.tipo_origen === 'Externo' ? (
+                            <span className="fw-bold" style={{ color: '#6f42c1' }}>🏢 {ticket.cliente || 'Sin cliente'}</span>
+                          ) : (
+                            <span>👤 {ticket.solicitante || 'Usuario'}</span>
+                          )}
+                        </td>
                       )}
                       {/* 4. Asunto */}
                       <td>{ticket.asunto}</td>
@@ -844,6 +875,58 @@ export default function Main({ cambiarVista, usuario }) {
                       </select>
                     </div>
                   </div>
+                  {/* MAGIA UX: Solo aparece si eligen Externo */}
+                    {formulario.tipo_origen === 'Externo' && (
+                      <div className="col-md-12 mb-3 animate__animated animate__fadeIn">
+                        <label className="form-label fw-bold text-purple">🏢 Seleccione el Cliente / Servicio</label>
+                        
+                        {!ingresandoNuevoCliente ? (
+                          <select 
+                            className="form-select border-purple" 
+                            name="cliente"
+                            value={formulario.cliente || ''} 
+                            onChange={(e) => {
+                              if(e.target.value === 'NUEVO_CLIENTE') {
+                                setIngresandoNuevoCliente(true); // Cambiamos a modo "Texto"
+                                manejarCambio({ target: { name: 'cliente', value: '' } }); // Limpiamos la variable
+                              } else {
+                                manejarCambio(e);
+                              }
+                            }}
+                            required
+                            disabled={esSoloLectura}
+                          >
+                            <option value="" disabled>Seleccione de la lista...</option>
+                            {clientesLista.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                            <option value="NUEVO_CLIENTE" className="fw-bold text-success">➕ Agregar nuevo cliente que no está en la lista...</option>
+                          </select>
+                        ) : (
+                          <div className="input-group">
+                            <input 
+                              type="text" 
+                              className="form-control border-success shadow-sm" 
+                              placeholder="Escriba el nombre exacto del nuevo cliente..."
+                              name="cliente"
+                              value={formulario.cliente || ''}
+                              onChange={(e) => setFormulario({...formulario, cliente: e.target.value})}
+                              required
+                              disabled={esSoloLectura}
+                              autoFocus
+                            />
+                            <button 
+                              className="btn btn-outline-danger" 
+                              type="button" 
+                              onClick={() => {
+                                setIngresandoNuevoCliente(false); // Volvemos al modo "Lista"
+                                manejarCambio({ target: { name: 'cliente', value: '' } });
+                              }}
+                            >
+                              ❌ Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   <div className="mb-3">
                     <label className="form-label fw-bold">Descripción detallada</label>
                     <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} placeholder="Explique el problema con el mayor detalle posible..." required disabled={esSoloLectura}></textarea>
