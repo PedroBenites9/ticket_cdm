@@ -65,6 +65,7 @@ export default function Main({ cambiarVista, usuario }) {
   // Gestión de Tickets y Filtros
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
+  const [filtroOrigen, setFiltroOrigen] = useState('Todos');
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
 
@@ -78,6 +79,8 @@ export default function Main({ cambiarVista, usuario }) {
 
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
+  const [busquedaTarea, setBusquedaTarea] = useState('');
+  const [filtroCategoriaTarea, setFiltroCategoriaTarea] = useState('Todas');
 
   // ==========================================
   // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
@@ -362,21 +365,25 @@ export default function Main({ cambiarVista, usuario }) {
   // 8. FILTRADO, ESTADÍSTICAS Y PAGINACIÓN
   // ==========================================
   const ticketsFiltrados = tickets.filter((ticket) => {
-  // REGLA DE PRIVACIDAD: ¿Quién está mirando?
+    // 1. REGLA DE PRIVACIDAD: ¿Quién está mirando?
     let permisoVer = false;
     if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
-      permisoVer = true; // Los de IT ven todo el panorama
+      permisoVer = true; 
     } else {
-      // El usuario final solo ve los tickets donde él sea el solicitante
       permisoVer = ticket.solicitante === usuario; 
     }
+    
     const coincideBusqueda = 
-    ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
-    ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (ticket.cliente && ticket.cliente.toLowerCase().includes(busqueda.toLowerCase()));
+      ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
+      ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      (ticket.cliente && ticket.cliente.toLowerCase().includes(busqueda.toLowerCase()));
+      
     const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
-    return permisoVer && coincideCategoria;
+    const origenDelTicket = ticket.tipo_origen || 'Interno'; 
+    const coincideOrigen = filtroOrigen === 'Todos' || origenDelTicket === filtroOrigen;
+
+    return permisoVer && coincideCategoria && coincideBusqueda && coincideOrigen;
   });
   // ==========================================
   // LÓGICA DE PAGINACIÓN
@@ -393,7 +400,7 @@ export default function Main({ cambiarVista, usuario }) {
   // Truco UX: Si el usuario busca algo y los resultados bajan, lo devolvemos a la página 1
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroCategoria]);
+  }, [busqueda, filtroCategoria, filtroOrigen]);
 
   const totalTickets = tickets.length;
   const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
@@ -433,6 +440,15 @@ export default function Main({ cambiarVista, usuario }) {
       }
     }, 100);
   };
+
+  // ==========================================
+  // LÓGICA DE FILTRADO PARA TAREAS / RUTINAS
+  // ==========================================
+  const tareasFiltradas = tareas.filter((tarea) => {
+    const coincideBusqueda = tarea.titulo?.toLowerCase().includes(busquedaTarea.toLowerCase());
+    const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
+    return coincideBusqueda && coincideCategoria;
+  });
   
 
   // ==========================================
@@ -605,15 +621,36 @@ export default function Main({ cambiarVista, usuario }) {
         )}
 
         {/* NUEVO: Filtros con las categorías reales de IT */}
-        {(rolUsuario  === 'Administrador' || rolUsuario === 'Tecnico') && (
-        <div className="d-flex flex-wrap gap-2 mb-3">
-          <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Redes e Internet' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('Redes e Internet')}>🌐 Redes e Internet</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Active Directory / Accesos' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Active Directory / Accesos')}>🔑 Active Directory / Accesos</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware e Insumos</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'Software y SO' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFiltroCategoria('Software y SO')}>💽 Software y SO</button>
-        <button className={`btn btn-sm ${filtroCategoria === 'CCTV' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoria('CCTV')}>📹 CCTV</button>
-        </div>
+        {(rolUsuario  === 'admin' || rolUsuario === 'tecnico') && (
+          <>
+          <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+            <span className="fw-bold text-secondary me-2">Origen:</span>
+            
+            <button className={`btn btn-sm ${filtroOrigen === 'Todos' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroOrigen('Todos')}>
+              Todos
+            </button>
+            
+            <button className={`btn btn-sm ${filtroOrigen === 'Interno' ? 'btn-info text-dark fw-bold' : 'btn-outline-info'}`} onClick={() => setFiltroOrigen('Interno')}>
+              🏢 Internos
+            </button>
+            
+            <button 
+              className={`btn btn-sm ${filtroOrigen === 'Externo' ? 'text-white fw-bold' : ''}`} 
+              style={filtroOrigen === 'Externo' ? {backgroundColor: '#6f42c1', borderColor: '#6f42c1'} : {color: '#6f42c1', borderColor: '#6f42c1'}} 
+              onClick={() => setFiltroOrigen('Externo')}
+            >
+              🤝 Externos
+            </button>
+          </div>
+          <div className="d-flex flex-wrap gap-2 mb-3">
+            <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
+            <button className={`btn btn-sm ${filtroCategoria === 'Redes e Internet' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('Redes e Internet')}>🌐 Redes e Internet</button>
+            <button className={`btn btn-sm ${filtroCategoria === 'Active Directory / Accesos' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Active Directory / Accesos')}>🔑 Active Directory / Accesos</button>
+            <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware e Insumos</button>
+            <button className={`btn btn-sm ${filtroCategoria === 'Software y SO' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFiltroCategoria('Software y SO')}>💽 Software y SO</button>
+          <button className={`btn btn-sm ${filtroCategoria === 'CCTV' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoria('CCTV')}>📹 CCTV</button>
+          </div>
+          </>
         )}
 
         <div className="mb-3">
@@ -778,14 +815,32 @@ export default function Main({ cambiarVista, usuario }) {
                   </button>
                 )}
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
-                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
+                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificospesta', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
                   setMostrarModalTarea(true); 
                 }}>
-                  + Nueva Rutina
+                  + Nuevo
                 </button>
               </div>
             
             <div className="card shadow-sm border-0">
+              {/* NUEVO: Filtros y Buscador de Tareas */}
+            <div className="d-flex flex-wrap gap-2 mt-4 mb-3">
+              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoriaTarea('Todas')}>Todas</button>
+              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Limpieza / General' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoriaTarea('Limpieza / General')}>🧹 Limpieza</button>
+              <button className={`btn btn-sm ${filtroCategoriaTarea === 'CCTV y Servidores' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoriaTarea('CCTV y Servidores')}>📹 CCTV y Servidores</button>
+              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Redes' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoriaTarea('Redes')}>🌐 Redes</button>
+              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Reportes' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoriaTarea('Reportes')}>📑 Reportes</button>
+            </div>
+
+            <div className="mb-3">
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="🔍 Buscar rutina por nombre o descripción..." 
+                value={busquedaTarea} 
+                onChange={(e) => setBusquedaTarea(e.target.value)} 
+              />
+            </div>
               <div className="card-body p-0 table-responsive">
                 <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
                   <thead className="table-light">
@@ -798,8 +853,7 @@ export default function Main({ cambiarVista, usuario }) {
                     </tr>
                   </thead>
                   <tbody>
-                   {tareas.length > 0 ? (
-                      tareas.map(tarea => {
+                   {tareasFiltradas.length > 0 ? (tareasFiltradas.map(tarea => {
                         // Verificamos si la tarea ya se completó hoy
                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
                        const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);

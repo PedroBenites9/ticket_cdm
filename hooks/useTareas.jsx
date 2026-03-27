@@ -7,7 +7,7 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const [tareas, setTareas] = useState([]);
   const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
   const [formularioTarea, setFormularioTarea] = useState({
-    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''
+    titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''
   });
 
   // 2. FUNCIONES DE LÓGICA

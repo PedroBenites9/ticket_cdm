@@ -11,7 +11,9 @@ const ModalTarea = ({
       <div className="modal-dialog">
         <div className="modal-content">
           <div className="modal-header bg-light">
-            <h5 className="modal-title fw-bold text-secondary">Programar Mantenimiento</h5>
+            <h5 className="modal-title fw-bold text-secondary">
+            {formularioTarea.id ? "✏️ Editar Rutina" : "Programar Rutina"}
+            </h5>
             <button type="button" className="btn-close" onClick={() => setMostrarModalTarea(false)}></button>
           </div>
           <div className="modal-body">
@@ -22,11 +24,24 @@ const ModalTarea = ({
               </div>
               <div className="mb-3">
                 <label className="form-label fw-bold">Categoría</label>
-                <select className="form-select" value={formularioTarea.categoria} onChange={(e) => setFormularioTarea({...formularioTarea, categoria: e.target.value})}>
-                  <option value="Limpieza / General">🧹 Limpieza</option>
-                  <option value="CCTV y Servidores">📹 CCTV</option>
-                  <option value="Redes">🌐 Redes</option>
-                  <option value="Reportes">📑 Reportes</option>
+                <select 
+                    className="form-select border-primary" 
+                    value={formularioTarea.frecuencia} 
+                    onChange={(e) => {
+                        const nuevaFrecuencia = e.target.value;
+                        setFormularioTarea({
+                        ...formularioTarea, 
+                        frecuencia: nuevaFrecuencia,
+                        // 🧹 MAGIA: Limpiamos los datos del otro modo para no enviar basura a la BD
+                        dias_especificos: nuevaFrecuencia === 'Fecha Unica' ? [] : formularioTarea.dias_especificos,
+                        fecha_unica: nuevaFrecuencia === 'Dias Especificos' ? '' : formularioTarea.fecha_unica
+                        });
+                    }}
+                >   
+                    <option value="Limpieza / General">🧹 Limpieza</option>
+                    <option value="CCTV y Servidores">📹 CCTV</option>
+                    <option value="Redes">🌐 Redes</option>
+                    <option value="Reportes">📑 Reportes</option>
                 </select>
               </div>
               <div className="row">
