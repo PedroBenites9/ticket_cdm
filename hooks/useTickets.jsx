@@ -129,7 +129,14 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
         });
         if (!respuesta.ok) throw new Error("Fallo en el servidor");
         const ticketCreado = await respuesta.json();
-        setTickets(prev => [ticketCreado, ...prev]);
+        
+        // ✅ LA SOLUCIÓN: Revisamos si el WebSocket ya lo agregó antes de meterlo nosotros
+        setTickets(prev => {
+          const yaExiste = prev.some(t => t.id === ticketCreado.id);
+          if (yaExiste) return prev; // Si ya está, no hacemos nada
+          return [ticketCreado, ...prev]; // Si no está, lo agregamos
+        });
+        
         toast.success("¡Ticket generado correctamente!");
       }
       setMostrarModal(false);

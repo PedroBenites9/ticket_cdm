@@ -69,33 +69,54 @@ export default function Main({ cambiarVista, usuario }) {
     cambiarVista('login');
   };
 
+// ====================================================
+  // NUEVO: GUARDIÁN DE INACTIVIDAD (15 Minutos sin tocar nada)
+  // ====================================================
   useEffect(() => {
-    const horaGuardada = localStorage.getItem('horaLogin');
+    let ultimoRegistro = Date.now();
 
-    if (horaGuardada) {
-      const tiempoActual = new Date().getTime();
-      const tiempoPasado = tiempoActual - parseInt(horaGuardada);
+    // 1. Esta función resetea el reloj a "ahora"
+    const registrarActividad = () => {
+      const ahora = Date.now();
+      // MAGIA DE RENDIMIENTO: Solo guardamos la actividad cada 2 segundos máximo.
+      // Así no saturamos la memoria de la PC cuando el usuario mueve mucho el mouse.
+      if (ahora - ultimoRegistro > 2000) {
+        localStorage.setItem('ultimaActividad', ahora);
+        ultimoRegistro = ahora;
+      }
+    };
+
+    // Dejamos la marca de tiempo inicial al entrar
+    localStorage.setItem('ultimaActividad', Date.now());
+
+    // 2. Le ponemos "sensores" a toda la pantalla
+    window.addEventListener('mousemove', registrarActividad);
+    window.addEventListener('keydown', registrarActividad);
+    window.addEventListener('click', registrarActividad);
+    window.addEventListener('scroll', registrarActividad);
+
+    // 3. El patrullero: Pasa cada 1 minuto a revisar si el usuario se durmió
+    const patrullero = setInterval(() => {
+      const ultimaVez = parseInt(localStorage.getItem('ultimaActividad') || Date.now());
+      const tiempoActual = Date.now();
       
-      const limiteTiempo = 15 * 60 * 1000; // 15 minutos exactos en milisegundos
+      const limiteInactividad = 15 * 60 * 1000; // 15 minutos en milisegundos
 
-      if (tiempoPasado < limiteTiempo) {
-        // AÚN TIENE TIEMPO: Programamos el cierre automático para lo que le reste
-        const tiempoRestante = limiteTiempo - tiempoPasado;
-        const temporizador = setTimeout(() => {
-          cerrarSesionAuto();
-        }, tiempoRestante);
-
-        // Limpiamos el cronómetro si cambia de vista antes de que acabe
-        return () => clearTimeout(temporizador);
-      } else {
-        // YA PASÓ EL TIEMPO: Lo sacamos inmediatamente
+      // Si la diferencia entre "ahora" y la "última vez que movió el mouse" es mayor a 15 min:
+      if (tiempoActual - ultimaVez > limiteInactividad) {
         cerrarSesionAuto();
       }
-    } else {
-      // Si entró a Main pero no tiene hora registrada, arranca el cronómetro ahora
-      localStorage.setItem('horaLogin', new Date().getTime());
-    }
-  }, []); 
+    }, 60000); // Revisa cada 60.000 ms (1 minuto)
+
+    // 4. Limpieza (cuando el usuario cierra el componente)
+    return () => {
+      window.removeEventListener('mousemove', registrarActividad);
+      window.removeEventListener('keydown', registrarActividad);
+      window.removeEventListener('click', registrarActividad);
+      window.removeEventListener('scroll', registrarActividad);
+      clearInterval(patrullero);
+    };
+  }, []);
   // ====================================================
 
   useEffect(() => {
@@ -682,11 +703,11 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                   </button>
                 )}
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
-  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
-  setMostrarModalTarea(true); 
-}}>
-  + Nueva Rutina
-</button>
+                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
+                  setMostrarModalTarea(true); 
+                }}>
+                  + Nueva Rutina
+                </button>
               </div>
             
             <div className="card shadow-sm border-0">
@@ -731,7 +752,8 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                               </div>
                             </td>
                             {/* 5. Acciones y Botones del Cronómetro */}
-                            <td>
+                            <td className="d-flex justify-content-center align-items-center gap-2">
+                              
                               {completadaHoy ? (
                                 <div className="d-flex justify-content-center align-items-center gap-2">
                                   <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
@@ -783,13 +805,7 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                                     >
                                       ✅ Finalizar
                                     </button>
-                                    <button 
-                                      className="btn btn-outline-warning btn-sm shadow-sm ms-1" 
-                                      title="Editar Rutina" 
-                                      onClick={() => abrirModalEditarTarea(tarea)}
-                                    >
-                                      ✏️
-                                    </button>
+                                    
                                     {/* NUEVO: BOTÓN DE ELIMINAR */}
                                     <button 
                                       className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
@@ -798,6 +814,7 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                                     >
                                       🗑️
                                     </button>
+                                    
                                   </div>
                                   
                                   {/* Mostramos los minutos acumulados abajo de los botones */}
@@ -806,8 +823,16 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                                       ⏱️ {Math.floor(tarea.tiempo_acumulado_minutos)} min dedicados
                                     </div>
                                   )}
+                                
                                 </div>
                               )}
+                              <button 
+                                className="btn btn-outline-warning btn-sm shadow-sm ms-1" 
+                                title="Editar Rutina" 
+                                onClick={() => abrirModalEditarTarea(tarea)}
+                              >
+                                ✏️
+                              </button>
                             </td>
                           </tr>
                         );
@@ -823,7 +848,11 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
         )}
       {VistaCarga}
       </main>
-
+{/**
+ * 
+ *  MODALES
+ * 
+ */}
       {/* MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
       {mostrarModal && (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -857,11 +886,14 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                       <label className="form-label fw-bold">Categoría IT</label>
                       <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required disabled={esSoloLectura}>
                         <option value="" disabled>Seleccione...</option>
-                        <option value="Redes e Internet">Redes e Internet</option>
-                        <option value="Active Directory / Accesos">Active Directory / Accesos</option>
-                        <option value="Hardware e Insumos">Hardware e Insumos</option>
-                        <option value="Software y SO">Software y Sistema Operativo</option>
-                        <option value="CCTV">CCTV</option>
+                        <option value="Redes e Internet">🌐 Redes e Internet</option>
+                        <option value="Active Directory / Accesos">🔑 Active Directory / Accesos</option>
+                        <option value="Hardware e Insumos">💻 Hardware e Insumos</option>
+                        <option value="Software y SO">💽 Software y Sistema Operativo</option>
+                        <option value="CCTV">📹 CCTV</option>
+                        <option value="Reportes">📑 Reportes</option>
+                        <option value="Mantenimiento">🛠️ Mantenimiento</option>
+                        <option value="Programas/Aplicaciones">📱 Programas/Aplicaciones</option>
                       </select>
                     </div>
 
@@ -908,7 +940,7 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
                               placeholder="Escriba el nombre exacto del nuevo cliente..."
                               name="cliente"
                               value={formulario.cliente || ''}
-                              onChange={(e) => setFormulario({...formulario, cliente: e.target.value})}
+                              onChange={(e) => setFormulario({...formulario, cliente: e.target.value.toUpperCase()})}
                               required
                               disabled={esSoloLectura}
                               autoFocus
@@ -1105,7 +1137,9 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
               </div>
               <div className="modal-footer bg-light">
                 <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalTarea(false)}>Cancelar</button>
-                <button type="submit" form="formTarea" className="btn btn-success">Guardar Rutina</button>
+                <button type="submit" form="formTarea" className="btn btn-success">
+  {formularioTarea.id ? "Guardar Cambios" : "Guardar Rutina"}
+</button>
               </div>
             </div>
           </div>
