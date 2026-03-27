@@ -38,7 +38,7 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
         toast.success(esEdicion ? "¡Rutina actualizada!" : "¡Nueva rutina creada!");
         setMostrarModalTarea(false);
         // Limpiamos el formulario (incluyendo el ID a null)
-        setFormularioTarea({ id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Diaria', hora_programada: '09:00', dias_especificos: [], fecha_unica: '' });
+        setFormularioTarea({ id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: '' });
       } else {
         toast.error("Error al guardar la tarea.");
       }

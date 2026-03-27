@@ -3,8 +3,10 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import logo from '../assets/logo.png';
 import { useCarga } from '../../hooks/useCarga'; 
+import ModalRecuperacion from './ModalRecuperacion';  
 
 export default function Login({ cambiarVista, setUsuarioActual }) {
+  const [mostrarRecuperacion, setMostrarRecuperacion] = useState(false);
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   const [formulario, setFormulario] = useState({
     email: '',
@@ -133,11 +135,25 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
                   Regístrate aquí
                 </a>
               </p>
+              <div className="text-center mt-3">
+  <button 
+    type="button" 
+    className="btn btn-link text-decoration-none small" 
+    onClick={() => setMostrarRecuperacion(true)}
+  >
+    ¿Olvidaste tu contraseña?
+  </button>
+</div>
             </div>
           </div>
         </div>
       </motion.div>
         {VistaCarga}
+      <ModalRecuperacion 
+  mostrar={mostrarRecuperacion} 
+  setMostrar={setMostrarRecuperacion} 
+  URL_API={'https://back-tickets-u01r.onrender.com/api'} // Asegúrate de pasarle la URL de tu backend
+/>
     </div>
   )
 }

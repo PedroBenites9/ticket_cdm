@@ -623,39 +623,46 @@ export default function Main({ cambiarVista, usuario }) {
         {/* NUEVO: Filtros con las categorías reales de IT */}
         {(rolUsuario  === 'admin' || rolUsuario === 'tecnico') && (
           <>
-          <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
-            <span className="fw-bold text-secondary me-2">Origen:</span>
+          <div className="row mb-3 gx-2">
             
-            <button className={`btn btn-sm ${filtroOrigen === 'Todos' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroOrigen('Todos')}>
-              Todos
-            </button>
-            
-            <button className={`btn btn-sm ${filtroOrigen === 'Interno' ? 'btn-info text-dark fw-bold' : 'btn-outline-info'}`} onClick={() => setFiltroOrigen('Interno')}>
-              🏢 Internos
-            </button>
-            
-            <button 
-              className={`btn btn-sm ${filtroOrigen === 'Externo' ? 'text-white fw-bold' : ''}`} 
-              style={filtroOrigen === 'Externo' ? {backgroundColor: '#6f42c1', borderColor: '#6f42c1'} : {color: '#6f42c1', borderColor: '#6f42c1'}} 
-              onClick={() => setFiltroOrigen('Externo')}
-            >
-              🤝 Externos
-            </button>
-          </div>
-          <div className="d-flex flex-wrap gap-2 mb-3">
-            <button className={`btn btn-sm ${filtroCategoria === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoria('Todas')}>Todas</button>
-            <button className={`btn btn-sm ${filtroCategoria === 'Redes e Internet' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoria('Redes e Internet')}>🌐 Redes e Internet</button>
-            <button className={`btn btn-sm ${filtroCategoria === 'Active Directory / Accesos' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoria('Active Directory / Accesos')}>🔑 Active Directory / Accesos</button>
-            <button className={`btn btn-sm ${filtroCategoria === 'Hardware e Insumos' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoria('Hardware e Insumos')}>💻 Hardware e Insumos</button>
-            <button className={`btn btn-sm ${filtroCategoria === 'Software y SO' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFiltroCategoria('Software y SO')}>💽 Software y SO</button>
-          <button className={`btn btn-sm ${filtroCategoria === 'CCTV' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoria('CCTV')}>📹 CCTV</button>
+            {/* 1. Buscador */}
+            <div className="col-md-5 mb-2 mb-md-0">
+              <div className="input-group shadow-sm">
+                <span className="input-group-text bg-white border-end-0">🔍</span>
+                <input type="text" className="form-control border-start-0" placeholder="Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+              </div>
+            </div>
+
+            {/* 2. Filtro de Origen */}
+            <div className="col-md-3 mb-2 mb-md-0">
+              <div className="input-group shadow-sm">
+                <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Origen</span>
+                <select className="form-select" value={filtroOrigen} onChange={(e) => setFiltroOrigen(e.target.value)}>
+                  <option value="Todos">Todos</option>
+                  <option value="Interno">🏢 Internos</option>
+                  <option value="Externo">🤝 Externos</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 3. Filtro de Categoría */}
+            <div className="col-md-4">
+              <div className="input-group shadow-sm">
+                <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Categoría</span>
+                <select className="form-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+                  <option value="Todas">Todas</option>
+                  <option value="Redes e Internet">🌐 Redes</option>
+                  <option value="Active Directory / Accesos">🔑 Accesos</option>
+                  <option value="Hardware e Insumos">💻 Hardware</option>
+                  <option value="Software y SO">💽 Software</option>
+                  <option value="CCTV">📹 CCTV</option>
+                </select>
+              </div>
+            </div>
+
           </div>
           </>
         )}
-
-        <div className="mb-3">
-          <input type="text" className="form-control" placeholder="🔍 Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-        </div>
         
         <div className="card shadow-sm" ref={tablaTicketsRef}>
           {/* <div className="card-body p-0 table-responsive" style={{ minHeight: '650px' }}> */}
@@ -815,7 +822,7 @@ export default function Main({ cambiarVista, usuario }) {
                   </button>
                 )}
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
-                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificospesta', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
+                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
                   setMostrarModalTarea(true); 
                 }}>
                   + Nuevo

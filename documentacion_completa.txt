@@ -1,0 +1,80 @@
+========================================================================
+RESUMEN DE FICHEROS Y DIRECTORIOS - PROYECTO CACHIBACHE (FRONTEND)
+========================================================================
+
+Este documento detalla la estructura y el propósito de cada archivo dentro del
+directorio de "hooks" y "src".
+
+------------------------------------------------------------------------
+📂 DIRECTORIO: /hooks (Raíz)
+------------------------------------------------------------------------
+Este directorio contiene la lógica de negocio y las llamadas a la API separadas de la interfaz visual.
+
+- useCarga.jsx 
+  -> Gestiona el estado de carga (loading) de la aplicación. Provee una vista de "Splash Screen" 
+     para evitar que el usuario vea componentes vacíos mientras llegan los datos.
+
+- useTareas.jsx 
+  -> Centraliza toda la lógica de mantenimientos preventivos y rutinas. Maneja la creación, 
+     edición, temporizadores de ejecución y exportación de métricas a Excel.
+
+- useTickets.jsx 
+  -> Controla el ciclo de vida de las incidencias (tickets). Lógica para abrir, asignar, 
+     cambiar estados y manejar la bitácora de mensajes de cada ticket.
+
+- useTicketWebSocket.jsx
+  -> Encapsula la lógica de conexión en tiempo real para eventos de tickets.
+
+------------------------------------------------------------------------
+📂 DIRECTORIO: /src
+------------------------------------------------------------------------
+Contiene el núcleo de la aplicación React y sus recursos principales.
+
+- App.jsx 
+  -> Componente raíz de la aplicación. Gestiona el enrutamiento interno entre la pantalla 
+     de Login, Registro y el Panel Principal (Main).
+
+- main.jsx 
+  -> Punto de entrada de React. Inicializa la aplicación y la vincula al DOM del archivo index.html.
+
+- index.css 
+  -> Estilos globales, tipografías y variables de diseño CSS.
+
+------------------------------------------------------------------------
+📂 DIRECTORIO: /src/components
+------------------------------------------------------------------------
+Contiene las pantallas principales y los componentes modulares.
+
+- Login.jsx 
+  -> Pantalla de acceso. Gestiona la autenticación con el servidor y guarda los tokens de sesión.
+
+- Register.jsx 
+  -> Pantalla de registro de nuevos usuarios en el sistema.
+
+- Main.jsx 
+  -> El componente más complejo. Pantalla principal que muestra el Dashboard, los gráficos, 
+     la tabla de tickets y la gestión de tareas. Está organizado en 10 bloques de código separados.
+
+- ModalTicket.jsx 
+  -> Componente modular para el formulario de tickets y el chat de bitácora.
+
+- ModalUsuarios.jsx 
+  -> Componente modular para que los administradores gestionen permisos y roles.
+
+- ModalTarea.jsx 
+  -> Componente modular para la gestión de tareas y mantenimientos programados.
+
+------------------------------------------------------------------------
+📂 DIRECTORIO: /src/assets
+------------------------------------------------------------------------
+Recursos estáticos utilizados en la interfaz.
+
+- logo.png / CDMlogo(Blanco).svg 
+  -> Identidad visual del sistema.
+
+- alarma.mp3 
+  -> Sonido de notificación que se activa en tiempo real cuando llega un nuevo ticket o mensaje.
+
+- favicon.png 
+  -> Ícono que aparece en la pestaña del navegador.
+------------------------------------------------------------------------
