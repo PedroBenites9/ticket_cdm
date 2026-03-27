@@ -1,25 +1,41 @@
+// React y Bibliotecas de UI
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import logo from '../assets/logo.png';
-import { useCarga } from '../../hooks/useCarga'; 
-import * as XLSX from 'xlsx';
+import { 
+  PieChart, Pie, Cell, BarChart, Bar, 
+  XAxis, YAxis, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 import { io } from 'socket.io-client';
-import sonidoAlerta from '../assets/alarma.mp3';
-import { useTareas } from '../../hooks/useTareas'; // Ajusta la ruta si es necesario
+import * as XLSX from 'xlsx';
+
+// Hooks Personalizados
+import { useCarga } from '../../hooks/useCarga'; 
+import { useTareas } from '../../hooks/useTareas';
 import { useTickets } from '../../hooks/useTickets';
+
+// Recursos (Assets)
+import logo from '../assets/logo.png';
+import sonidoAlerta from '../assets/alarma.mp3';
+
+// Componentes de Modales Externos
+import ModalTicket from './ModalTicket';
+import ModalUsuarios from './ModalUsuarios';
+import ModalTarea from './ModalTarea';
 
 const socket = io('https://back-tickets-u01r.onrender.com');
 // const socket = io('http://localhost:3000');
 
 export default function Main({ cambiarVista, usuario }) {
-   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
+  // ==========================================
+  // 1. HOOKS PRINCIPALES
+  // ==========================================
+  const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   const URL_API = 'https://back-tickets-u01r.onrender.com/api';
   // const URL_API = 'http://localhost:3000/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
-  // ---> INSTANCIAMOS EL NUEVO HOOK DE TAREAS <---
+  // Hook de Tareas
   const {
     tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
@@ -27,7 +43,7 @@ export default function Main({ cambiarVista, usuario }) {
     exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
-  // ---> INSTANCIAMOS EL NUEVO HOOK DE TICKETS <--- 
+  // Hook de Tickets
   const {
     tickets, setTickets, cargando, setCargando, mostrarModal, setMostrarModal,
     editandoId, setEditandoId, comentarios, setComentarios, nuevoComentario, setNuevoComentario,
@@ -38,77 +54,68 @@ export default function Main({ cambiarVista, usuario }) {
   } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
  
   // ==========================================
-  // ESTADOS PARA TICKETS
+  // 2. REFS Y ESTADOS DE INTERFAZ
   // ==========================================
 
+  const tablaTicketsRef = useRef(null);
+
+  // ==========================================
+  // 3. ESTADOS DE LA APLICACIÓN
+  // ==========================================
+  // Gestión de Tickets y Filtros
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
 
-  // GESTIÓN DE USUARIOS
+  // Paginación de Tickets
+  const [paginaActual, setPaginaActual] = useState(1);
+  const ticketsPorPagina = 10;
+
+  // Gestión de Usuarios
   const [usuariosLista, setUsuariosLista] = useState([]);
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
-  // ==========================================
-  // ESTADOS PARA RUTINAS DIARIAS (Mantenimiento)
-  // ==========================================
-  const [pestañaActual, setPestañaActual] = useState('tickets'); // Controla si vemos 'tickets' o 'tareas'
 
-  // ====================================================
-  // NUEVO: GUARDIÁN DE SESIÓN (Sobrevive al F5 y dura 15 min)
-  // ====================================================
+  // Navegación (Pestañas)
+  const [pestañaActual, setPestañaActual] = useState('tickets');
+
+  // ==========================================
+  // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
+  // ==========================================
   const cerrarSesionAuto = () => {
     localStorage.removeItem('token_acceso'); 
     localStorage.removeItem('nombre_usuario');
     localStorage.removeItem('rol_usuario');
     localStorage.removeItem('area_usuario');
-    localStorage.removeItem('horaLogin'); // Borramos el reloj
-    
-    // Le avisamos al usuario y lo mandamos al login
+    localStorage.removeItem('horaLogin');
     toast.warning("⏱️ Tu sesión ha expirado por seguridad.");
     cambiarVista('login');
   };
 
-// ====================================================
-  // NUEVO: GUARDIÁN DE INACTIVIDAD (15 Minutos sin tocar nada)
-  // ====================================================
   useEffect(() => {
     let ultimoRegistro = Date.now();
-
-    // 1. Esta función resetea el reloj a "ahora"
     const registrarActividad = () => {
       const ahora = Date.now();
-      // MAGIA DE RENDIMIENTO: Solo guardamos la actividad cada 2 segundos máximo.
-      // Así no saturamos la memoria de la PC cuando el usuario mueve mucho el mouse.
       if (ahora - ultimoRegistro > 2000) {
         localStorage.setItem('ultimaActividad', ahora);
         ultimoRegistro = ahora;
       }
     };
-
-    // Dejamos la marca de tiempo inicial al entrar
     localStorage.setItem('ultimaActividad', Date.now());
-
-    // 2. Le ponemos "sensores" a toda la pantalla
     window.addEventListener('mousemove', registrarActividad);
     window.addEventListener('keydown', registrarActividad);
     window.addEventListener('click', registrarActividad);
     window.addEventListener('scroll', registrarActividad);
 
-    // 3. El patrullero: Pasa cada 1 minuto a revisar si el usuario se durmió
     const patrullero = setInterval(() => {
       const ultimaVez = parseInt(localStorage.getItem('ultimaActividad') || Date.now());
       const tiempoActual = Date.now();
-      
-      const limiteInactividad = 15 * 60 * 1000; // 15 minutos en milisegundos
-
-      // Si la diferencia entre "ahora" y la "última vez que movió el mouse" es mayor a 15 min:
+      const limiteInactividad = 15 * 60 * 1000;
       if (tiempoActual - ultimaVez > limiteInactividad) {
         cerrarSesionAuto();
       }
-    }, 60000); // Revisa cada 60.000 ms (1 minuto)
+    }, 60000);
 
-    // 4. Limpieza (cuando el usuario cierra el componente)
     return () => {
       window.removeEventListener('mousemove', registrarActividad);
       window.removeEventListener('keydown', registrarActividad);
@@ -122,26 +129,27 @@ export default function Main({ cambiarVista, usuario }) {
   useEffect(() => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
-  useEffect(() => {
-    editandoIdRef.current = editandoId;
-  }, [editandoId]);
 
- let areaUsuario = localStorage.getItem('area_usuario');
-  // Si no existe, o si es literalmente la palabra "undefined" o "null"
-  if (!areaUsuario || areaUsuario === 'undefined' || areaUsuario === 'null') {
-    areaUsuario = 'Área no asignada';
-  } // <-- NUEVO
-// NUEVO: Identificamos si el ticket abierto está bloqueado
+  // ==========================================
+  // 5. ESTADO DERIVADO Y CÁLCULOS
+  // ==========================================
   const ticketAbierto = tickets.find(t => t.id === editandoId);
+  
+  let areaUsuario = localStorage.getItem('area_usuario') || 'Área no asignada';
+  if (areaUsuario === 'undefined' || areaUsuario === 'null') {
+    areaUsuario = 'Área no asignada';
+  }
 
-
+  // ==========================================
+  // 6. EFECTOS DE CARGA Y WEBSOCKETS
+  // ==========================================
   useEffect(() => {
     // 1. Carga inicial tradicional (una sola vez)
     const obtenerDatos = async () => {
       try {
         const respuestaTickets = await fetch(`${URL_API}/tickets`);
         setTickets(await respuestaTickets.json());
-const respuestaClientes = await fetch(`${URL_API}/clientes`);
+        const respuestaClientes = await fetch(`${URL_API}/clientes`);
         setClientesLista(await respuestaClientes.json());
         const respuestaTareas = await fetch(`${URL_API}/tareas`);
         setTareas(await respuestaTareas.json());
@@ -286,6 +294,9 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
   }, [editandoId]);
 
 
+  // ==========================================
+  // 7. FUNCIONES HANDLERS (MODALES Y DATOS)
+  // ==========================================
   const cargarComentarios = async (idTicket) => {
     try {
       const respuesta = await fetch(`${URL_API}/tickets/${idTicket}/comentarios`);
@@ -317,6 +328,7 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
     XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
     toast.success("¡Reporte de Excel descargado con éxito!");
   };
+
   // ==========================================
   // NUEVO: Exportar Historial de Tareas a Excel
   // ==========================================
@@ -346,8 +358,11 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
     }
   };
 
+  // ==========================================
+  // 8. FILTRADO, ESTADÍSTICAS Y PAGINACIÓN
+  // ==========================================
   const ticketsFiltrados = tickets.filter((ticket) => {
-    // 1. REGLA DE PRIVACIDAD: ¿Quién está mirando?
+  // REGLA DE PRIVACIDAD: ¿Quién está mirando?
     let permisoVer = false;
     if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
       permisoVer = true; // Los de IT ven todo el panorama
@@ -363,6 +378,22 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
     const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
     return permisoVer && coincideCategoria;
   });
+  // ==========================================
+  // LÓGICA DE PAGINACIÓN
+  // ==========================================
+  const indiceUltimoTicket = paginaActual * ticketsPorPagina;
+  const indicePrimerTicket = indiceUltimoTicket - ticketsPorPagina;
+  
+  // Extraemos solo los tickets que van en la página actual
+  const ticketsPaginados = ticketsFiltrados.slice(indicePrimerTicket, indiceUltimoTicket);
+  
+  // Calculamos cuántas páginas hay en total
+  const totalPaginas = Math.ceil(ticketsFiltrados.length / ticketsPorPagina);
+
+  // Truco UX: Si el usuario busca algo y los resultados bajan, lo devolvemos a la página 1
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [busqueda, filtroCategoria]);
 
   const totalTickets = tickets.length;
   const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
@@ -391,7 +422,22 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
     abrirModalCrear(); // Llamamos a tu función del Hook que limpia el formulario
     setIngresandoNuevoCliente(false); // Apagamos el cuadrito de texto
   };
+  // Lógica inteligente para cambiar de página con Scroll Suave
+  const cambiarPagina = (nuevaPagina) => {
+    setPaginaActual(nuevaPagina);
+    // Le damos 100 milisegundos a React para que dibuje las 10 filas nuevas antes de viajar
+    setTimeout(() => {
+      if (tablaTicketsRef.current) {
+        // block: 'start' alinea la tabla justo en la parte superior de tu pantalla
+        tablaTicketsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
   
+
+  // ==========================================
+  // 10. RENDERIZADO DEL COMPONENTE (UI)
+  // ==========================================
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
       <header className="navbar navbar-dark bg-dark shadow-sm position-relative">
@@ -452,9 +498,9 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
           )}
           
         </ul>
-        {/* ==================================================== */}
-        {/* VISTA 1: TICKETS                       */}
-        {/* ==================================================== */}
+        {/* ====================================================  */}
+        {/* VISTA 1: TICKETS                                      */}
+        {/* ====================================================  */}
         {pestañaActual === 'tickets' && (
           <div className="animate__animated animate__fadeIn">
              {/* AQUÍ VA TODO TU CÓDIGO ACTUAL: El título "Mis Incidencias", los botones, los gráficos, los filtros y la tabla de tickets */}
@@ -574,7 +620,8 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
           <input type="text" className="form-control" placeholder="🔍 Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         
-        <div className="card shadow-sm">
+        <div className="card shadow-sm" ref={tablaTicketsRef}>
+          {/* <div className="card-body p-0 table-responsive" style={{ minHeight: '650px' }}> */}
           <div className="card-body p-0 table-responsive">
             <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
               <thead className="table-light">
@@ -594,8 +641,7 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
               <tbody>
                 {cargando ? (
                   <tr><td colSpan="7">Cargando...</td></tr>
-                ) : ticketsFiltrados.length > 0 ? (
-                  ticketsFiltrados.map((ticket) => (
+                ) : ticketsPaginados.length > 0 ? (ticketsPaginados.map((ticket) => (
                    <tr key={ticket.id}>
                       {/* 1. Código */}
                       <td className="fw-bold">{ticket.codigo}</td>
@@ -687,6 +733,35 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
             </table>
           </div>
         </div>
+        {/* CONTROLES DE PAGINACIÓN */}
+        {totalPaginas > 1 && (
+          <div className="d-flex justify-content-between align-items-center mt-3">
+            <span className="text-muted small">
+              Mostrando {indicePrimerTicket + 1} a {Math.min(indiceUltimoTicket, ticketsFiltrados.length)} de {ticketsFiltrados.length} tickets
+            </span>
+            <div className="btn-group shadow-sm">
+              <button 
+                className="btn btn-outline-secondary btn-sm" 
+                onClick={() => cambiarPagina(Math.max(paginaActual - 1, 1))}
+                disabled={paginaActual === 1}
+              >
+                ⬅️ Anterior
+              </button>
+              
+              <span className="btn btn-secondary btn-sm disabled text-white fw-bold">
+                Página {paginaActual} de {totalPaginas}
+              </span>
+              
+              <button 
+                className="btn btn-outline-secondary btn-sm" 
+                onClick={() => cambiarPagina(Math.min(paginaActual + 1, totalPaginas))}
+                disabled={paginaActual === totalPaginas}
+              >
+                Siguiente ➡️
+              </button>
+            </div>
+          </div>
+        )}
           </div>
         )}
         {/* ==================================================== */}
@@ -848,304 +923,28 @@ const respuestaClientes = await fetch(`${URL_API}/clientes`);
         )}
       {VistaCarga}
       </main>
-{/**
- * 
- *  MODALES
- * 
- */}
-      {/* MODAL DE CREACIÓN / EDICIÓN Y BITÁCORA */}
-      {mostrarModal && (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg"> 
-            <div className="modal-content">
-              <div className="modal-header bg-light">
-                <h5 className="modal-title fw-bold text-secondary">
-                  {editandoId ? "Detalles y Bitácora del Ticket" : "Reportar Incidencia de Soporte IT"}
-                </h5>
-                <button type="button" className="btn-close" onClick={() => { setMostrarModal(false); setEditandoId(null); }}></button>
-              </div>
-              
-              <div className="modal-body">
-                <form id="formTicket" onSubmit={guardarTicket}>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">Asunto breve (Ej: PC sin internet)</label>
-                    <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required disabled={esSoloLectura}/>
-                  </div>
-                  <div className="row">
-                    
-                    {/* NUEVO: Selector de Origen (Interno/Externo) */}
-                    <div className="col-md-4 mb-3">
-                      <label className="form-label fw-bold">Origen / Cliente</label>
-                      <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen} onChange={manejarCambio} required disabled={esSoloLectura}>
-                        <option value="Interno">🏢 Personal Interno</option>
-                        <option value="Externo">🤝 Cliente Externo</option>
-                      </select>
-                    </div>
 
-                    <div className="col-md-5 mb-3">
-                      <label className="form-label fw-bold">Categoría IT</label>
-                      <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required disabled={esSoloLectura}>
-                        <option value="" disabled>Seleccione...</option>
-                        <option value="Redes e Internet">🌐 Redes e Internet</option>
-                        <option value="Active Directory / Accesos">🔑 Active Directory / Accesos</option>
-                        <option value="Hardware e Insumos">💻 Hardware e Insumos</option>
-                        <option value="Software y SO">💽 Software y Sistema Operativo</option>
-                        <option value="CCTV">📹 CCTV</option>
-                        <option value="Reportes">📑 Reportes</option>
-                        <option value="Mantenimiento">🛠️ Mantenimiento</option>
-                        <option value="Programas/Aplicaciones">📱 Programas/Aplicaciones</option>
-                      </select>
-                    </div>
-
-                    <div className="col-md-3 mb-3">
-                      <label className="form-label fw-bold">Prioridad</label>
-                      <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio} disabled={esSoloLectura}>
-                        <option value="Baja">Baja</option>
-                        <option value="Media">Media</option>
-                        <option value="Alta">Alta</option>
-                        <option value="Urgente">🚨 Urgente</option>
-                      </select>
-                    </div>
-                  </div>
-                  {/* MAGIA UX: Solo aparece si eligen Externo */}
-                    {formulario.tipo_origen === 'Externo' && (
-                      <div className="col-md-12 mb-3 animate__animated animate__fadeIn">
-                        <label className="form-label fw-bold text-purple">🏢 Seleccione el Cliente / Servicio</label>
-                        
-                        {!ingresandoNuevoCliente ? (
-                          <select 
-                            className="form-select border-purple" 
-                            name="cliente"
-                            value={formulario.cliente || ''} 
-                            onChange={(e) => {
-                              if(e.target.value === 'NUEVO_CLIENTE') {
-                                setIngresandoNuevoCliente(true); // Cambiamos a modo "Texto"
-                                manejarCambio({ target: { name: 'cliente', value: '' } }); // Limpiamos la variable
-                              } else {
-                                manejarCambio(e);
-                              }
-                            }}
-                            required
-                            disabled={esSoloLectura}
-                          >
-                            <option value="" disabled>Seleccione de la lista...</option>
-                            {clientesLista.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-                            <option value="NUEVO_CLIENTE" className="fw-bold text-success">➕ Agregar nuevo cliente que no está en la lista...</option>
-                          </select>
-                        ) : (
-                          <div className="input-group">
-                            <input 
-                              type="text" 
-                              className="form-control border-success shadow-sm" 
-                              placeholder="Escriba el nombre exacto del nuevo cliente..."
-                              name="cliente"
-                              value={formulario.cliente || ''}
-                              onChange={(e) => setFormulario({...formulario, cliente: e.target.value.toUpperCase()})}
-                              required
-                              disabled={esSoloLectura}
-                              autoFocus
-                            />
-                            <button 
-                              className="btn btn-outline-danger" 
-                              type="button" 
-                              onClick={() => {
-                                setIngresandoNuevoCliente(false); // Volvemos al modo "Lista"
-                                manejarCambio({ target: { name: 'cliente', value: '' } });
-                              }}
-                            >
-                              ❌ Cancelar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">Descripción detallada</label>
-                    <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} placeholder="Explique el problema con el mayor detalle posible..." required disabled={esSoloLectura}></textarea>
-                  </div>
-                </form>
-
-                {/* BITÁCORA */}
-                {editandoId && (
-                  <div className="mt-4 pt-4 border-top">
-                    <h6 className="fw-bold text-secondary mb-3">💬 Bitácora de Soporte</h6>
-                    <div className="bg-light p-3 rounded mb-3 border" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                      {comentarios.length > 0 ? (
-                        comentarios.map((c) => (
-                          <div key={c.id} className="mb-3 pb-2 border-bottom">
-                            <div className="d-flex justify-content-between align-items-center mb-1">
-                              <span className="fw-bold text-primary small">{c.autor}</span>
-                              <span className="text-muted" style={{ fontSize: '0.7rem' }}>
-                                {new Date(c.fecha).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="text-dark small">{c.texto}</div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-muted small text-center mb-0 fst-italic">No hay notas registradas en este ticket.</p>
-                      )}
-                      <div ref={finalDelChatRef} />
-                    </div>
-                    <div className="d-flex gap-2">
-                      <input type="text" className="form-control form-control-sm" placeholder="Registrar una actualización del caso..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} disabled={esSoloLectura}/>
-                      <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario} disabled={esSoloLectura}>Enviar</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer bg-light" >
-                  <button type="button" className="btn btn-secondary" onClick={() => { setMostrarModal(false); setEditandoId(null); }}>Cerrar</button>              
-                  {/* 2. MAGIA UX: Solo mostramos el botón verde si estamos CREANDO un ticket nuevo, o si somos de IT */}
-                  {(!editandoId || rolUsuario !== 'final') && (
-                  <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
-                    {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE GESTIÓN DE USUARIOS */}
-      {mostrarModalUsuarios && rolUsuario === 'admin' && (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content border-0 shadow-lg">
-              <div className="modal-header bg-dark text-white">
-                <h5 className="modal-title fw-bold">👥 Gestión de Permisos y Roles</h5>
-                <button type="button" className="btn-close btn-close-white" onClick={() => setMostrarModalUsuarios(false)}></button>
-              </div>
-              <div className="modal-body p-0">
-                <table className="table table-hover mb-0 text-center align-middle">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Email</th>
-                      <th>Rol Actual</th>
-                      <th>Cambiar Rol a...</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usuariosLista.map((u) => (
-                      <tr key={u.id}>
-                        <td className="fw-bold">{u.nombre}</td>
-                        <td className="text-muted">{u.email}</td>
-                        <td>
-                          <span className={`badge ${u.rol === 'admin' ? 'bg-danger' : u.rol === 'tecnico' ? 'bg-primary' : 'bg-secondary'}`}>
-                            {u.rol.toUpperCase()}
-                          </span>
-                        </td>
-                        <td>
-                          <select className="form-select form-select-sm mx-auto" style={{ width: '130px' }} value={u.rol} onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}>
-                            <option value="final">Usuario Final</option>
-                            <option value="tecnico">Técnico</option>
-                            <option value="admin">Administrador</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="modal-footer bg-light">
-                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalUsuarios(false)}>Cerrar Panel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ========================================== */}
-      {/* MODAL PARA CREAR RUTINA DIARIA             */}
-      {/* ========================================== */}
-      {mostrarModalTarea && (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header bg-light">
-                <h5 className="modal-title fw-bold text-secondary">Programar Mantenimiento</h5>
-                <button type="button" className="btn-close" onClick={() => setMostrarModalTarea(false)}></button>
-              </div>
-              <div className="modal-body">
-                <form id="formTarea" onSubmit={guardarTarea}>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">¿Qué se debe realizar?</label>
-                    <input type="text" className="form-control" value={formularioTarea.titulo} onChange={(e) => setFormularioTarea({...formularioTarea, titulo: e.target.value})} placeholder="Ej: Limpiar depósito principal, Revisión de DVR..." required />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">Categoría</label>
-                    <select className="form-select" value={formularioTarea.categoria} onChange={(e) => setFormularioTarea({...formularioTarea, categoria: e.target.value})}>
-                      <option value="Limpieza / General">🧹 Limpieza e Instalaciones</option>
-                      <option value="CCTV y Servidores">📹 CCTV y Servidores</option>
-                      <option value="Redes">🌐 Mantenimiento de Red</option>
-                      <option value="Reportes"> 📑 Reportes</option>
-                    </select>
-                  </div>
-                 <div className="row">
-                    <div className="col-6 mb-3">
-                      <label className="form-label fw-bold">Frecuencia</label>
-                      <select className="form-select" value={formularioTarea.frecuencia} onChange={(e) => setFormularioTarea({...formularioTarea, frecuencia: e.target.value})}>
-                        <option value="Dias Especificos" className="fw-bold text-primary">📅 Días Específicos</option>
-                        <option value="Fecha Unica" className="fw-bold text-success">🎯 Tarea Mensual</option>
-                      </select>
-                    </div>
-                    <div className="col-6 mb-3">
-                      <label className="form-label fw-bold">Hora Límite de Ejecución</label>
-                      <input type="time" className="form-control" value={formularioTarea.hora_programada} onChange={(e) => setFormularioTarea({...formularioTarea, hora_programada: e.target.value})} required />
-                    </div>
-                  </div>
-
-                  {/* MAGIA CONDICIONAL: Solo aparece si eligen "Días Específicos" */}
-                  {formularioTarea.frecuencia === 'Dias Especificos' && (
-                    <div className="mb-3 p-3 bg-light border rounded shadow-sm">
-                      <label className="form-label fw-bold d-block mb-2 text-primary">Seleccione los días a realizar:</label>
-                      <div className="d-flex flex-wrap gap-2 justify-content-between">
-                        {/* Nota: En JavaScript el Domingo es el día 0, Lunes 1, etc. */}
-                        {[{id: 1, label: 'Lun'}, {id: 2, label: 'Mar'}, {id: 3, label: 'Mié'}, {id: 4, label: 'Jue'}, {id: 5, label: 'Vie'}, {id: 6, label: 'Sáb'}, {id: 0, label: 'Dom'}].map(dia => (
-                          <div className="form-check form-check-inline me-0" key={dia.id}>
-                            <input 
-                              className="form-check-input border-primary cursor-pointer" 
-                              type="checkbox" 
-                              id={`dia-${dia.id}`} 
-                              checked={formularioTarea.dias_especificos?.includes(dia.id)}
-                              onChange={() => manejarDias(dia.id)} 
-                            />
-                            <label className="form-check-label fw-bold text-secondary cursor-pointer" htmlFor={`dia-${dia.id}`}>
-                              {dia.label}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* MAGIA CONDICIONAL: Solo aparece si eligen "Fecha Única" */}
-                  {formularioTarea.frecuencia === 'Fecha Unica' && (
-                    <div className="mb-3 p-3 bg-light border rounded shadow-sm border-success">
-                      <label className="form-label fw-bold text-success">Seleccione la Fecha Exacta:</label>
-                      <input 
-                        type="date" 
-                        className="form-control border-success" 
-                        value={formularioTarea.fecha_unica} 
-                        onChange={(e) => setFormularioTarea({...formularioTarea, fecha_unica: e.target.value})} 
-                        required={formularioTarea.frecuencia === 'Fecha Unica'} 
-                      />
-                    </div>
-                  )}
-                </form>
-              </div>
-              <div className="modal-footer bg-light">
-                <button type="button" className="btn btn-secondary" onClick={() => setMostrarModalTarea(false)}>Cancelar</button>
-                <button type="submit" form="formTarea" className="btn btn-success">
-  {formularioTarea.id ? "Guardar Cambios" : "Guardar Rutina"}
-</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* BLOQUE DE MODALES EXTERNOS */}
+      <ModalTicket 
+        mostrarModal={mostrarModal} setMostrarModal={setMostrarModal}
+        editandoId={editandoId} setEditandoId={setEditandoId}
+        formulario={formulario} manejarCambio={manejarCambio} setFormulario={setFormulario}
+        esSoloLectura={esSoloLectura} guardarTicket={guardarTicket}
+        ingresandoNuevoCliente={ingresandoNuevoCliente} setIngresandoNuevoCliente={setIngresandoNuevoCliente}
+        clientesLista={clientesLista} comentarios={comentarios}
+        nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario}
+        enviarComentario={enviarComentario} rolUsuario={rolUsuario}
+        finalDelChatRef={finalDelChatRef}
+      />
+      <ModalUsuarios 
+        mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}
+        rolUsuario={rolUsuario} usuariosLista={usuariosLista} cambiarRolUsuario={cambiarRolUsuario}
+      />
+      <ModalTarea 
+        mostrarModalTarea={mostrarModalTarea} setMostrarModalTarea={setMostrarModalTarea}
+        formularioTarea={formularioTarea} setFormularioTarea={setFormularioTarea}
+        manejarDias={manejarDias} guardarTarea={guardarTarea}
+      />
     </motion.div>
-    
-  )
+  );
 }
