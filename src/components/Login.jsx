@@ -26,11 +26,17 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
     
     try {
       // Usamos la URL de producción de Render
-      const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/login', {
+      const respuesta = await fetch('http://localhost:3000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
       });
+
+      // const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/login', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(formulario)
+      // });
 
       const datos = await respuesta.json();
 

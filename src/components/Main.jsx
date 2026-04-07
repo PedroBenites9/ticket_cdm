@@ -23,16 +23,16 @@ import ModalTicket from './ModalTicket';
 import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 
-const socket = io('https://back-tickets-u01r.onrender.com');
-// const socket = io('http://localhost:3000');
+// const socket = io('https://back-tickets-u01r.onrender.com');
+const socket = io('http://localhost:3000');
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 1. HOOKS PRINCIPALES
   // ==========================================
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
-  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  // const URL_API = 'http://localhost:3000/api';
+  // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+  const URL_API = 'http://localhost:3000/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   // Hook de Tareas
@@ -581,7 +581,7 @@ export default function Main({ cambiarVista, usuario }) {
 
         {rolUsuario === 'admin' && (
           <div className="row mb-4">
-            <div className="col-md-6 mb-3">
+            <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
                 <div style={{ height: '250px' }}>
@@ -599,7 +599,7 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
-            <div className="col-md-6 mb-3">
+            <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría IT</h6>
                 <div style={{ height: '250px' }}>
