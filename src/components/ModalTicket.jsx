@@ -1,17 +1,17 @@
 import React from 'react';
 
-const ModalTicket = ({ 
-  mostrarModal, setMostrarModal, editandoId, setEditandoId, 
-  formulario, manejarCambio, setFormulario, esSoloLectura, 
-  guardarTicket, ingresandoNuevoCliente, setIngresandoNuevoCliente, 
-  clientesLista, comentarios, nuevoComentario, setNuevoComentario, 
-  enviarComentario, rolUsuario, finalDelChatRef 
+const ModalTicket = ({
+  mostrarModal, setMostrarModal, editandoId, setEditandoId,
+  formulario, manejarCambio, setFormulario, esSoloLectura,
+  guardarTicket, ingresandoNuevoCliente, setIngresandoNuevoCliente,
+  clientesLista, comentarios, nuevoComentario, setNuevoComentario,
+  enviarComentario, rolUsuario, finalDelChatRef
 }) => {
   if (!mostrarModal) return null;
 
   return (
     <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog modal-lg"> 
+      <div className="modal-dialog modal-lg">
         <div className="modal-content">
           <div className="modal-header bg-light">
             <h5 className="modal-title fw-bold text-secondary">
@@ -23,7 +23,7 @@ const ModalTicket = ({
             <form id="formTicket" onSubmit={guardarTicket}>
               <div className="mb-3">
                 <label className="form-label fw-bold">Asunto breve (Ej: PC sin internet)</label>
-                <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required disabled={esSoloLectura}/>
+                <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required disabled={esSoloLectura} />
               </div>
               <div className="row">
                 <div className="col-md-4 mb-3">
@@ -61,12 +61,12 @@ const ModalTicket = ({
                 <div className="col-md-12 mb-3 animate__animated animate__fadeIn">
                   <label className="form-label fw-bold text-purple">🏢 Seleccione el Cliente / Servicio</label>
                   {!ingresandoNuevoCliente ? (
-                    <select 
-                      className="form-select border-purple" 
+                    <select
+                      className="form-select border-purple"
                       name="cliente"
-                      value={formulario.cliente || ''} 
+                      value={formulario.cliente || ''}
                       onChange={(e) => {
-                        if(e.target.value === 'NUEVO_CLIENTE') {
+                        if (e.target.value === 'NUEVO_CLIENTE') {
                           setIngresandoNuevoCliente(true);
                           manejarCambio({ target: { name: 'cliente', value: '' } });
                         } else {
@@ -82,13 +82,13 @@ const ModalTicket = ({
                     </select>
                   ) : (
                     <div className="input-group">
-                      <input 
-                        type="text" 
-                        className="form-control border-success shadow-sm" 
+                      <input
+                        type="text"
+                        className="form-control border-success shadow-sm"
                         placeholder="Nombre del nuevo cliente..."
                         name="cliente"
                         value={formulario.cliente || ''}
-                        onChange={(e) => setFormulario({...formulario, cliente: e.target.value.toUpperCase()})}
+                        onChange={(e) => setFormulario({ ...formulario, cliente: e.target.value.toUpperCase() })}
                         required
                         disabled={esSoloLectura}
                         autoFocus
@@ -112,9 +112,9 @@ const ModalTicket = ({
                       <div key={c.id} className="mb-3 pb-2 border-bottom">
                         <div className="d-flex justify-content-between align-items-center mb-1">
                           <span className="fw-bold text-primary small">{c.autor}</span>
-                          <span className="text-muted" style={{ fontSize: '0.7rem' }}>{new Date(c.fecha).toLocaleString()}</span>
+                          <span className="text-muted" style={{ fontSize: '0.7rem' }}>{new Date(c.fecha_creacion).toLocaleString()}</span>
                         </div>
-                        <div className="text-dark small">{c.texto}</div>
+                        <div className="text-dark small">{c.mensaje}</div>
                       </div>
                     ))
                   ) : (
@@ -123,14 +123,14 @@ const ModalTicket = ({
                   <div ref={finalDelChatRef} />
                 </div>
                 <div className="d-flex gap-2">
-                  <input type="text" className="form-control form-control-sm" placeholder="Nueva nota..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} disabled={esSoloLectura}/>
+                  <input type="text" className="form-control form-control-sm" placeholder="Nueva nota..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviarComentario()} disabled={esSoloLectura} />
                   <button type="button" className="btn btn-primary btn-sm px-4" onClick={enviarComentario} disabled={esSoloLectura}>Enviar</button>
                 </div>
               </div>
             )}
           </div>
           <div className="modal-footer bg-light" >
-            <button type="button" className="btn btn-secondary" onClick={() => { setMostrarModal(false); setEditandoId(null); }}>Cerrar</button>              
+            <button type="button" className="btn btn-secondary" onClick={() => { setMostrarModal(false); setEditandoId(null); }}>Cerrar</button>
             {(!editandoId || rolUsuario !== 'final') && (
               <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
                 {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}

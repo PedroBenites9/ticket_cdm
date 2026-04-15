@@ -24,7 +24,7 @@ import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 
 // const socket = io('https://back-tickets-u01r.onrender.com');
-const socket = io('http://localhost:3000');
+const socket = io();
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
@@ -32,7 +32,7 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  const URL_API = 'http://localhost:3000/api';
+  const URL_API = '/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   // Hook de Tareas

@@ -25,8 +25,8 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
     mostrarCarga();
     
     try {
-      // Usamos la URL de producción de Render
-      const respuesta = await fetch('http://localhost:3000/api/login', {
+      // Usamos ruta relativa para el contenedor unificado
+      const respuesta = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
@@ -158,7 +158,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
       <ModalRecuperacion 
   mostrar={mostrarRecuperacion} 
   setMostrar={setMostrarRecuperacion} 
-  URL_API={'https://back-tickets-u01r.onrender.com/api'} // Asegúrate de pasarle la URL de tu backend
+  URL_API={'/api'} // Usamos ruta relativa
 />
     </div>
   )

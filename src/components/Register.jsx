@@ -25,7 +25,7 @@ export default function Register({ cambiarVista }) {
     e.preventDefault();
     mostrarCarga();
     try {
-      const respuesta = await fetch('http://localhost:3000/api/registro', {
+      const respuesta = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
