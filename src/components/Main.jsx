@@ -24,7 +24,11 @@ import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 
 // const socket = io('https://back-tickets-u01r.onrender.com');
+<<<<<<< HEAD
 const socket = io('http://localhost:3000');
+=======
+const socket = io();
+>>>>>>> 46e0bb0a76d9687ac87518cf78bc9a47e16191d9
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
