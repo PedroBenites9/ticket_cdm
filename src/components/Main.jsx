@@ -77,6 +77,8 @@ export default function Main({ cambiarVista, usuario }) {
   // Gestión de Usuarios
   const [usuariosLista, setUsuariosLista] = useState([]);
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
+  const [areasDisponibles, setAreasDisponibles] = useState([]);
+  const [areaUsuario, setAreaUsuario] = useState(localStorage.getItem('area_usuario') || '');
 
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
@@ -128,6 +130,23 @@ export default function Main({ cambiarVista, usuario }) {
       clearInterval(patrullero);
     };
   }, []);
+
+
+
+  useEffect(() => {
+    const cargarAreas = async () => {
+      try {
+        const res = await fetch('/api/usuarios/areas');
+        if (res.ok) {
+          const data = await res.json();
+          setAreasDisponibles(data);
+        }
+      } catch (error) {
+        console.error("Error cargando áreas", error);
+      }
+    };
+    cargarAreas();
+  }, []);
   // ====================================================
 
   useEffect(() => {
@@ -139,10 +158,6 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   const ticketAbierto = tickets.find(t => t.id === editandoId);
   
-  let areaUsuario = localStorage.getItem('area_usuario') || 'Área no asignada';
-  if (areaUsuario === 'undefined' || areaUsuario === 'null') {
-    areaUsuario = 'Área no asignada';
-  }
 
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
@@ -427,6 +442,42 @@ export default function Main({ cambiarVista, usuario }) {
     name: key,
     cantidad: conteoCategorias[key]
   }));
+  const cambiarAreaUsuario = async (idUsuario, nuevaArea) => {
+    try {
+      const res = await fetch(`/api/usuarios/${idUsuario}/area`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ area: nuevaArea })
+      });
+      
+      if (res.ok) {
+        const usuarioActualizado = await res.json();
+        
+        // 1. Actualizamos la fila en la tabla del Modal
+        setUsuariosLista((prev) => prev.map(u => u.id === idUsuario ? usuarioActualizado : u));
+        
+        // ==========================================
+        // 2. EL FIX PARA EL HEADER (MI SESIÓN)
+        // ==========================================
+        const nombreLogueado = localStorage.getItem('nombre_usuario');
+        
+        // Si el usuario modificado soy yo mismo...
+        if (usuarioActualizado.nombre === nombreLogueado) {
+          // Actualizo la memoria del navegador
+          localStorage.setItem('area_usuario', usuarioActualizado.area);
+          
+          // ⚠️ IMPORTANTE: Dependiendo de cómo se llame tu estado en Main.jsx, actualizalo acá.
+          // Si arriba de todo tenés un "const [areaUsuario, setAreaUsuario] = useState(...)",
+          // entonces tenés que descomentar la línea de abajo para que cambie en vivo sin dar F5:
+          
+          setAreaUsuario(usuarioActualizado.area); 
+        }
+        
+      }
+    } catch (error) {
+      console.error("Error cambiando área", error);
+    }
+  };
   
   // Función limpia para manejar el botón de nuevo ticket
   const manejarNuevoTicket = () => {
@@ -444,6 +495,7 @@ export default function Main({ cambiarVista, usuario }) {
       }
     }, 100);
   };
+
 
   // ==========================================
   // LÓGICA DE FILTRADO PARA TAREAS / RUTINAS
@@ -1023,6 +1075,8 @@ export default function Main({ cambiarVista, usuario }) {
       <ModalUsuarios 
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}
         rolUsuario={rolUsuario} usuariosLista={usuariosLista} cambiarRolUsuario={cambiarRolUsuario}
+        cambiarAreaUsuario={cambiarAreaUsuario}
+    areasDisponibles={areasDisponibles}
       />
       <ModalTarea 
         mostrarModalTarea={mostrarModalTarea} setMostrarModalTarea={setMostrarModalTarea}

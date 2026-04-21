@@ -1,14 +1,17 @@
 import React from 'react';
 
-const ModalUsuarios = ({ 
-  mostrarModalUsuarios, setMostrarModalUsuarios, 
-  rolUsuario, usuariosLista, cambiarRolUsuario 
+const ModalUsuarios = ({
+  mostrarModalUsuarios, setMostrarModalUsuarios,
+  rolUsuario, usuariosLista, cambiarRolUsuario,
+  // 👇 ¡Agregamos estas dos nuevas props! 👇
+  cambiarAreaUsuario, areasDisponibles
 }) => {
   if (!mostrarModalUsuarios || rolUsuario !== 'admin') return null;
 
   return (
     <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
-      <div className="modal-dialog modal-lg">
+      {/* Usamos modal-xl para que sea un poquito más ancho y entren bien las columnas */}
+      <div className="modal-dialog modal-xl"> 
         <div className="modal-content border-0 shadow-lg">
           <div className="modal-header bg-dark text-white">
             <h5 className="modal-title fw-bold">👥 Gestión de Permisos</h5>
@@ -20,6 +23,10 @@ const ModalUsuarios = ({
                 <tr>
                   <th>Nombre</th>
                   <th>Email</th>
+                  {/* Nuevas columnas de Área */}
+                  <th>Área Actual</th>
+                  <th>Cambiar Área</th>
+                  {/* Columnas originales de Rol */}
                   <th>Rol Actual</th>
                   <th>Cambiar Rol</th>
                 </tr>
@@ -28,10 +35,38 @@ const ModalUsuarios = ({
                 {usuariosLista.map((u) => (
                   <tr key={u.id}>
                     <td className="fw-bold">{u.nombre}</td>
-                    <td className="text-muted">{u.email}</td>
-                    <td><span className={`badge ${u.rol === 'admin' ? 'bg-danger' : u.rol === 'tecnico' ? 'bg-primary' : 'bg-secondary'}`}>{u.rol.toUpperCase()}</span></td>
+                    <td className="text-muted"><u>{u.email}</u></td>
+
+                    {/* === NUEVA SECCIÓN: ÁREA === */}
+                    <td><span className="badge bg-info text-dark">{u.area || 'Sin Área'}</span></td>
                     <td>
-                      <select className="form-select form-select-sm mx-auto" style={{ width: '130px' }} value={u.rol} onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}>
+                      <select 
+                        className="form-select form-select-sm mx-auto" 
+                        style={{ width: '150px' }} 
+                        value={u.area || ""} 
+                        onChange={(e) => cambiarAreaUsuario(u.id, e.target.value)}
+                      >
+                        <option value="" disabled>Seleccionar...</option>
+                        {/* Mapeamos las áreas (el && es por seguridad por si tarda en cargar) */}
+                        {areasDisponibles && areasDisponibles.map(area => (
+                          <option key={area.codigo} value={area.codigo}>{area.nombre}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* === SECCIÓN ORIGINAL: ROL === */}
+                    <td>
+                      <span className={`badge ${u.rol === 'admin' ? 'bg-danger' : u.rol === 'tecnico' ? 'bg-primary' : 'bg-secondary'}`}>
+                        {u.rol ? u.rol.toUpperCase() : ''}
+                      </span>
+                    </td>
+                    <td>
+                      <select 
+                        className="form-select form-select-sm mx-auto" 
+                        style={{ width: '140px' }} 
+                        value={u.rol} 
+                        onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}
+                      >
                         <option value="final">Usuario Final</option>
                         <option value="tecnico">Técnico</option>
                         <option value="admin">Administrador</option>

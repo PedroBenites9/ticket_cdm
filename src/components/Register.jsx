@@ -1,8 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useCarga } from '../../hooks/useCarga'; 
 
 export default function Register({ cambiarVista }) {
+  // 1. Estado para guardar las áreas
+  const [areasDisponibles, setAreasDisponibles] = useState([]);
+
+
+   useEffect(() => {
+       const cargarAreas = async () => {
+           try {
+               const res = await fetch('/api/usuarios/areas'); 
+               if (res.ok) {
+                   const data = await res.json();
+                   setAreasDisponibles(data);
+               }
+           } catch (error) {
+               console.error("Error cargando áreas", error);
+           }
+       };
+       cargarAreas();
+   }, []);
+
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   // 1. Estado para guardar los datos del formulario
   const [formulario, setFormulario] = useState({
@@ -25,12 +44,11 @@ export default function Register({ cambiarVista }) {
     e.preventDefault();
     mostrarCarga();
     try {
-      const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/registro', {
+     const respuesta = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
       });
-
       const datos = await respuesta.json();
       
       if (respuesta.ok) {
@@ -85,25 +103,21 @@ export default function Register({ cambiarVista }) {
                 required
               />
               {/* NUEVO: Selector de Áreas */}
-              <select 
-                className="form-select mb-3 border-secondary" 
-                name="area"
-                value={formulario.area}
-                onChange={manejarCambio}
-                required
-              >
-                <option value="" disabled>Seleccione su Área...</option>
-                <option value="Tesoreria">Tesorería</option>
-                <option value="Sindico">Síndico</option>
-                <option value="Operaciones">Operaciones</option>
-                <option value="Comercial">Comercial</option>
-                <option value="Logistica">Logística</option>
-                <option value="RRHH">RRHH</option>
-                <option value="Incorporaciones">Incorporaciones</option>
-                <option value="Habilitaciones">Habilitaciones</option>
-                <option value="Tecnologia">Tecnología (IT)</option>
+              <select
+              className="form-select mb-3 border-secondary"
+              name="area"
+              value={formulario.area}
+              onChange={manejarCambio}
+              required
+            >
+              <option value="" disabled>Seleccione su Área...</option>
+              {areasDisponibles.map((area) => (
+                <option key={area.codigo} value={area.codigo}>
+                  {area.nombre}
+                </option>
+              ))}
               </select>
-              
+              {console.log(areasDisponibles)}
               <button type="submit" className="btn btn-success w-100">
                 Registrarme
               </button>
