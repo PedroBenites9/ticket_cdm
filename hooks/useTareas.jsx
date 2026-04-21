@@ -8,7 +8,9 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
   const [formularioTarea, setFormularioTarea] = useState({
     titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''
-  });
+  }); // CORREGIR: AL editar una tarea, se carga nuevamente esta linea de codigo 
+  const [indicadores, setIndicadores] = useState({ cantidadNuevas: 0, idsNuevas: [], atrasadas: 0, proximas: 0 });
+
 
   // 2. FUNCIONES DE LÓGICA
   const manejarDias = (diaId) => {
@@ -168,7 +170,6 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
            fechaCompletada.getFullYear() === hoy.getFullYear();
   };
 
-  // NUEVO: Traductor visual para la columna de Frecuencia
   const formatearFrecuenciaTexto = (tarea) => {
     // Si eligieron días específicos, traducimos los números a texto
     if (tarea.frecuencia === 'Dias Especificos') {
@@ -198,11 +199,42 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     // Si es Diaria, Semanal o Mensual, devolvemos el texto normal
     return tarea.frecuencia;
   };
+  
+  const cargarIndicadores = async () => {
+    if (!usuario) return;
+    try {
+      const res = await fetch(`${URL_API}/tareas/indicadores/${encodeURIComponent(usuario)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setIndicadores(data);
+      }
+    } catch (error) {
+      console.error("Error cargando indicadores", error);
+    }
+  };
+
+  const marcarComoVista = async (tareaId) => {
+    if (!indicadores?.idsNuevas?.includes(tareaId)) return;
+    try {
+      await fetch(`${URL_API}/tareas/${tareaId}/marcar-vista`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombreUsuario: usuario }) 
+      });
+      setIndicadores(prev => ({
+        ...prev,
+        cantidadNuevas: prev.cantidadNuevas - 1,
+        idsNuevas: prev.idsNuevas.filter(id => id !== tareaId)
+      }));
+    } catch (error) {
+      console.error("Error marcando vista", error);
+    }
+  };
 
   const abrirModalEditarTarea = (tarea) => {
-  // Cargamos los datos exactos de la tarea en el formulario
+  marcarComoVista(tarea.id);
   setFormularioTarea({
-    id: tarea.id, // ¡Clave! El ID nos dirá que estamos editando
+    id: tarea.id, 
     titulo: tarea.titulo,
     categoria: tarea.categoria,
     frecuencia: tarea.frecuencia,
@@ -220,6 +252,8 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     formularioTarea, setFormularioTarea,
     manejarDias, guardarTarea, marcarTareaCompletada,
     iniciarTarea, pausarTarea, eliminarTarea,
-    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea
+    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,indicadores, 
+    cargarIndicadores, 
+    marcarComoVista
   };
 };

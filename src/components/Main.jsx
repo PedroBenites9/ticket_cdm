@@ -23,16 +23,16 @@ import ModalTicket from './ModalTicket';
 import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 
-const socket = io('https://back-tickets-u01r.onrender.com');
-// const socket = io('http://localhost:3000');
+// const socket = io('https://back-tickets-u01r.onrender.com');
+const socket = io('http://localhost:3000');
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 1. HOOKS PRINCIPALES
   // ==========================================
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
-  const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  // const URL_API = 'http://localhost:3000/api';
+  // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
+  const URL_API = '/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   // Hook de Tareas
@@ -40,7 +40,8 @@ export default function Main({ cambiarVista, usuario }) {
     tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
     marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
-    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea
+    exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,
+    indicadores, cargarIndicadores 
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
   // Hook de Tickets
@@ -113,7 +114,7 @@ export default function Main({ cambiarVista, usuario }) {
     const patrullero = setInterval(() => {
       const ultimaVez = parseInt(localStorage.getItem('ultimaActividad') || Date.now());
       const tiempoActual = Date.now();
-      const limiteInactividad = 15 * 60 * 1000;
+      const limiteInactividad = 30 * 60 * 1000;
       if (tiempoActual - ultimaVez > limiteInactividad) {
         cerrarSesionAuto();
       }
@@ -156,6 +157,7 @@ export default function Main({ cambiarVista, usuario }) {
         setClientesLista(await respuestaClientes.json());
         const respuestaTareas = await fetch(`${URL_API}/tareas`);
         setTareas(await respuestaTareas.json());
+        cargarIndicadores();
       } catch (error) {
         toast.error("Error al cargar los datos del servidor.");
       } finally {
@@ -223,7 +225,9 @@ export default function Main({ cambiarVista, usuario }) {
     
     // Antena 1: Si alguien crea una nueva rutina
     socket.on('tareaCreada', (nuevaTarea) => {
+      cargarIndicadores();
       setTareas((tareasAnteriores) => {
+        
         // Filtro anti-eco: ¿La tarea nueva ya la tengo dibujada?
         const yaExiste = tareasAnteriores.some(t => t.id === nuevaTarea.id);
         if (yaExiste) return tareasAnteriores;
@@ -498,21 +502,35 @@ export default function Main({ cambiarVista, usuario }) {
       </header>
 
       <main className="container mt-5 mb-5">
-        {/* LAS PESTAÑAS DE NAVEGACIÓN */}
-        <ul className="nav nav-tabs mb-4 border-bottom-0 gap-1">
-          <li className="nav-item">
-            <button className={`nav-link text-dark ${pestañaActual === 'tickets' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} onClick={() => setPestañaActual('tickets')}>
-              🎫 Soporte IT
-            </button>
-          </li>
-          {(rolUsuario === 'admin' || rolUsuario === 'tecnico') &&  (
+    {/* LAS PESTAÑAS DE NAVEGACIÓN */}
+    <ul className="nav nav-tabs mb-4 border-bottom-0 gap-1">
+      <li className="nav-item">
+        <button 
+          className={`nav-link text-dark ${pestañaActual === 'tickets' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} 
+          onClick={() => setPestañaActual('tickets')}
+        >
+          🎫 Soporte IT
+        </button>
+      </li>
+      
+      {(rolUsuario === 'admin' || rolUsuario === 'tecnico') &&  (
             <li className="nav-item">
-            <button className={`nav-link text-dark ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} onClick={() => setPestañaActual('tareas')}>
-              🔄 Mantenimiento y Rutinas
-            </button>
-          </li>
+              <button 
+                className={`nav-link text-dark d-flex align-items-center ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} 
+                onClick={() => setPestañaActual('tareas')}
+              >
+                🔄 Mantenimiento y Rutinas
+                
+                {/* 🔴 EL GLOBITO DE NOTIFICACIÓN EN LA PESTAÑA */}
+                {indicadores?.cantidadNuevas > 0 && (
+                  <span className="badge bg-danger rounded-pill ms-2" style={{ fontSize: '0.75rem', padding: '0.35em 0.65em' }}>
+                    {indicadores.cantidadNuevas}
+                  </span>
+                )}
+              </button>
+            </li>
           )}
-          
+    
         </ul>
         {/* ====================================================  */}
         {/* VISTA 1: TICKETS                                      */}
@@ -581,7 +599,7 @@ export default function Main({ cambiarVista, usuario }) {
 
         {rolUsuario === 'admin' && (
           <div className="row mb-4">
-            <div className="col-md-6 mb-3">
+            <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
                 <div style={{ height: '250px' }}>
@@ -599,7 +617,7 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
               </div>
             </div>
-            <div className="col-md-6 mb-3">
+            <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
                 <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría IT</h6>
                 <div style={{ height: '250px' }}>
@@ -874,6 +892,11 @@ export default function Main({ cambiarVista, usuario }) {
                             {/* Tachamos el título si ya está lista */}
                             <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
                               {tarea.titulo}
+                              {indicadores?.idsNuevas?.includes(tarea.id) && (
+                                <span className="badge bg-danger rounded-circle p-1 ms-2 d-inline-block" title="¡Tarea Nueva!" style={{ width: '10px', height: '10px' }}>
+                                  <span className="visually-hidden">Tarea Nueva</span>
+                                </span>
+                              )}
                             </td>
                             <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
                             <td className="text-secondary fw-semibold">
@@ -942,7 +965,7 @@ export default function Main({ cambiarVista, usuario }) {
                                       ✅ Finalizar
                                     </button>
                                     
-                                    {/* NUEVO: BOTÓN DE ELIMINAR */}
+                                    {/* BOTÓN DE ELIMINAR */}
                                     <button 
                                       className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
                                       title="Eliminar Rutina" 
