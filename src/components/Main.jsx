@@ -24,11 +24,7 @@ import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 
 // const socket = io('https://back-tickets-u01r.onrender.com');
-<<<<<<< HEAD
 const socket = io('http://localhost:3000');
-=======
-const socket = io();
->>>>>>> 46e0bb0a76d9687ac87518cf78bc9a47e16191d9
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
@@ -55,7 +51,7 @@ export default function Main({ cambiarVista, usuario }) {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, 
   } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
  
   // ==========================================
@@ -151,7 +147,6 @@ export default function Main({ cambiarVista, usuario }) {
     };
     cargarAreas();
   }, []);
-  // ====================================================
 
   useEffect(() => {
     editandoIdRef.current = editandoId;
@@ -309,15 +304,6 @@ export default function Main({ cambiarVista, usuario }) {
     }
   }, [comentarios]);
 
-  useEffect(() => {
-    let intervalo;
-    if (editandoId) {
-      intervalo = setInterval(() => {
-        cargarComentarios(editandoId);
-      }, 3000); 
-    }
-    return () => clearInterval(intervalo); 
-  }, [editandoId]);
 
 
   // ==========================================
@@ -446,6 +432,7 @@ export default function Main({ cambiarVista, usuario }) {
     name: key,
     cantidad: conteoCategorias[key]
   }));
+
   const cambiarAreaUsuario = async (idUsuario, nuevaArea) => {
     try {
       const res = await fetch(`/api/usuarios/${idUsuario}/area`, {
@@ -457,22 +444,12 @@ export default function Main({ cambiarVista, usuario }) {
       if (res.ok) {
         const usuarioActualizado = await res.json();
         
-        // 1. Actualizamos la fila en la tabla del Modal
         setUsuariosLista((prev) => prev.map(u => u.id === idUsuario ? usuarioActualizado : u));
         
-        // ==========================================
-        // 2. EL FIX PARA EL HEADER (MI SESIÓN)
-        // ==========================================
         const nombreLogueado = localStorage.getItem('nombre_usuario');
         
-        // Si el usuario modificado soy yo mismo...
         if (usuarioActualizado.nombre === nombreLogueado) {
-          // Actualizo la memoria del navegador
           localStorage.setItem('area_usuario', usuarioActualizado.area);
-          
-          // ⚠️ IMPORTANTE: Dependiendo de cómo se llame tu estado en Main.jsx, actualizalo acá.
-          // Si arriba de todo tenés un "const [areaUsuario, setAreaUsuario] = useState(...)",
-          // entonces tenés que descomentar la línea de abajo para que cambie en vivo sin dar F5:
           
           setAreaUsuario(usuarioActualizado.area); 
         }
@@ -483,12 +460,10 @@ export default function Main({ cambiarVista, usuario }) {
     }
   };
   
-  // Función limpia para manejar el botón de nuevo ticket
   const manejarNuevoTicket = () => {
-    abrirModalCrear(); // Llamamos a tu función del Hook que limpia el formulario
-    setIngresandoNuevoCliente(false); // Apagamos el cuadrito de texto
+    abrirModalCrear(); 
+    setIngresandoNuevoCliente(false); 
   };
-  // Lógica inteligente para cambiar de página con Scroll Suave
   const cambiarPagina = (nuevaPagina) => {
     setPaginaActual(nuevaPagina);
     // Le damos 100 milisegundos a React para que dibuje las 10 filas nuevas antes de viajar
@@ -653,7 +628,7 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         )}
 
-        {rolUsuario === 'admin' && (
+        {(rolUsuario === 'admin' || areaUsuario == 'CoordinadorGral') && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
@@ -961,9 +936,17 @@ export default function Main({ cambiarVista, usuario }) {
                            
                             <td>
                               <div className="d-flex flex-column align-items-center">
-                                <span className={`fw-bold px-2 py-1 rounded ${new Date(tarea.proxima_ejecucion) < new Date() ? 'bg-danger text-white' : 'bg-warning text-dark'}`}>
-                                  {calcularTiempoTarea(tarea)}
-                                </span>
+                                {completadaHoy ? (
+                                  /* Si ya está lista, mostramos la próxima ejecución amigablemente */
+                                  <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
+                                    Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                  </span>
+                                ) : (
+                                  /* Si NO está lista, mostramos Atrasada o Esperando Fecha como tenías antes */
+                                  <span className={`fw-bold px-2 py-1 rounded ${new Date(tarea.proxima_ejecucion) < new Date() ? 'bg-danger text-white' : 'bg-warning text-dark'}`}>
+                                    {calcularTiempoTarea(tarea)}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             {/* 5. Acciones y Botones del Cronómetro */}
@@ -1075,6 +1058,7 @@ export default function Main({ cambiarVista, usuario }) {
         nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario}
         enviarComentario={enviarComentario} rolUsuario={rolUsuario}
         finalDelChatRef={finalDelChatRef}
+        usuarioLogueado={usuario}
       />
       <ModalUsuarios 
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}

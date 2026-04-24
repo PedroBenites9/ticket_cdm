@@ -5,7 +5,7 @@ const ModalTicket = ({
   formulario, manejarCambio, setFormulario, esSoloLectura,
   guardarTicket, ingresandoNuevoCliente, setIngresandoNuevoCliente,
   clientesLista, comentarios, nuevoComentario, setNuevoComentario,
-  enviarComentario, rolUsuario, finalDelChatRef
+  enviarComentario, rolUsuario, finalDelChatRef,descripcion, usuarioLogueado
 }) => {
   if (!mostrarModal) return null;
 
@@ -100,7 +100,7 @@ const ModalTicket = ({
               )}
               <div className="mb-3">
                 <label className="form-label fw-bold">Descripción detallada</label>
-                <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required disabled={esSoloLectura}></textarea>
+               <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required disabled={editandoId && (usuarioLogueado !== formulario.solicitante)}></textarea>
               </div>
             </form>
             {editandoId && (
@@ -130,8 +130,7 @@ const ModalTicket = ({
             )}
           </div>
           <div className="modal-footer bg-light" >
-            <button type="button" className="btn btn-secondary" onClick={() => { setMostrarModal(false); setEditandoId(null); }}>Cerrar</button>
-            {(!editandoId || rolUsuario !== 'final') && (
+            {(editandoId ) && (
               <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
                 {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
               </button>

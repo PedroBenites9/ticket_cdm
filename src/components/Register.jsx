@@ -44,24 +44,11 @@ export default function Register({ cambiarVista }) {
     e.preventDefault();
     mostrarCarga();
     try {
-<<<<<<< HEAD
      const respuesta = await fetch('/api/registro', {
-=======
-      const respuesta = await fetch('/api/registro', {
->>>>>>> 46e0bb0a76d9687ac87518cf78bc9a47e16191d9
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formulario)
       });
-<<<<<<< HEAD
-=======
-      // const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/registro', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formulario)
-      // });
-
->>>>>>> 46e0bb0a76d9687ac87518cf78bc9a47e16191d9
       const datos = await respuesta.json();
       
       if (respuesta.ok) {

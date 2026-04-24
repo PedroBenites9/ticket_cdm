@@ -25,10 +25,6 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
     mostrarCarga();
     
     try {
-<<<<<<< HEAD
-=======
-      // Usamos ruta relativa para el contenedor unificado
->>>>>>> 46e0bb0a76d9687ac87518cf78bc9a47e16191d9
       const respuesta = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

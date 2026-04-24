@@ -11,7 +11,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [ticketsConMensaje, setTicketsConMensaje] = useState([]);
   const [formulario, setFormulario] = useState({
-    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:''
+    asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:'', 
   });
   // REFERENCIAS
   const editandoIdRef = useRef(null);
@@ -25,15 +25,11 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
-  useEffect(() => {
-    let intervalo;
-    if (editandoId) {
-      intervalo = setInterval(() => {
-        cargarComentarios(editandoId);
-      }, 3000);
-    }
-    return () => clearInterval(intervalo);
-  }, [editandoId]);
+useEffect(() => {
+  if (editandoId) {
+    cargarComentarios(editandoId);
+  }
+}, [editandoId]); 
 
   // FUNCIONES DE APOYO
   const obtenerColorEstado = (estado) => {
@@ -63,7 +59,8 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const manejarCambio = (e) => setFormulario({ ...formulario, [e.target.name]: e.target.value });
 
   const abrirModalCrear = () => {
-    setFormulario({ asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:''});
+    setFormulario({ asunto: '', categoria: '', prioridad: 'Media',
+      descripcion: '', tipo_origen: 'Interno', cliente:'', solicitante:''});
     setEditandoId(null);
     setComentarios([]);
     setMostrarModal(true);
@@ -82,7 +79,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto, categoria: ticket.categoria, prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen || 'Interno', cliente: ticket.cliente || ''
+      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen, solicitante: ticket.solicitante || 'Interno', cliente: ticket.cliente || ''
     });
     setEditandoId(ticket.id);
     cargarComentarios(ticket.id);
@@ -116,7 +113,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
       if (editandoId) {
         const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paqueteAEnviar)
+          body: JSON.stringify({...paqueteAEnviar,usuario_actual:usuario})
         });
         if (!respuesta.ok) throw new Error("Fallo en el servidor");
         const ticketActualizado = await respuesta.json();
@@ -130,11 +127,10 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
         if (!respuesta.ok) throw new Error("Fallo en el servidor");
         const ticketCreado = await respuesta.json();
         
-        // ✅ LA SOLUCIÓN: Revisamos si el WebSocket ya lo agregó antes de meterlo nosotros
         setTickets(prev => {
           const yaExiste = prev.some(t => t.id === ticketCreado.id);
-          if (yaExiste) return prev; // Si ya está, no hacemos nada
-          return [ticketCreado, ...prev]; // Si no está, lo agregamos
+          if (yaExiste) return prev; 
+          return [ticketCreado, ...prev]; 
         });
         
         toast.success("¡Ticket generado correctamente!");
