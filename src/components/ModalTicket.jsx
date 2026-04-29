@@ -129,12 +129,11 @@ const ModalTicket = ({
               </div>
             )}
           </div>
-          <div className="modal-footer bg-light" >
-            {(editandoId ) && (
+         <div className="modal-footer bg-light">
+              {/* El botón siempre se dibuja, pero se deshabilita si es de solo lectura */}
               <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
-                {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
+                  {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
               </button>
-            )}
           </div>
         </div>
       </div>

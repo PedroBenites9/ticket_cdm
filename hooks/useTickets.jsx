@@ -25,11 +25,14 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
-useEffect(() => {
-  if (editandoId) {
-    cargarComentarios(editandoId);
-  }
-}, [editandoId]); 
+  useEffect(() => {
+    if (editandoId) {
+      cargarComentarios(editandoId);
+    }
+  }, [editandoId]); 
+  useEffect(() => {
+      cargarTickets();
+    }, []);
 
   // FUNCIONES DE APOYO
   const obtenerColorEstado = (estado) => {
@@ -104,46 +107,69 @@ useEffect(() => {
     }
   };
 
-  const guardarTicket = async (e) => {
+  const cargarTickets = async () => {
+    // 1. Forzamos la lectura fresca del storage
+    const rol = localStorage.getItem('rol_usuario');
+    const area = localStorage.getItem('area_usuario');
+    const nombre = localStorage.getItem('nombre_usuario');
+
+    // 2. Si no hay datos, no pedimos nada (evitamos el error del backend)
+    if (!rol || !area) {
+      console.log("⏳ Esperando datos de sesión...");
+      return;
+    }
+
+    try {
+      // 3. Agregamos un timestamp al final para evitar el cache del navegador
+      const url = `${URL_API}/tickets?rol=${rol}&area=${area}&nombre_usuario=${nombre}&t=${Date.now()}`;
+      
+      const respuesta = await fetch(url);
+      if (!respuesta.ok) throw new Error("Error en fetch");
+      
+      const datos = await respuesta.json();
+      setTickets(datos);
+      setCargando(false);
+    } catch (error) {
+      console.error("❌ Error al obtener tickets:", error);
+    }
+  };
+
+const guardarTicket = async (e) => {
     e.preventDefault();
     mostrarCarga();
     try {
-      const nombreReal = usuario || localStorage.getItem('nombre_usuario') || 'Usuario Desconocido';
-      const paqueteAEnviar = { ...formulario, solicitante: nombreReal };
-      if (editandoId) {
-        const respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({...paqueteAEnviar,usuario_actual:usuario})
-        });
-        if (!respuesta.ok) throw new Error("Fallo en el servidor");
-        const ticketActualizado = await respuesta.json();
-        setTickets(prev => prev.map(t => t.id === editandoId ? ticketActualizado : t));
-        toast.success("¡Ticket actualizado correctamente!");
-      } else {
-        const respuesta = await fetch(`${URL_API}/tickets`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paqueteAEnviar)
-        });
-        if (!respuesta.ok) throw new Error("Fallo en el servidor");
-        const ticketCreado = await respuesta.json();
-        
-        setTickets(prev => {
-          const yaExiste = prev.some(t => t.id === ticketCreado.id);
-          if (yaExiste) return prev; 
-          return [ticketCreado, ...prev]; 
-        });
-        
-        toast.success("¡Ticket generado correctamente!");
-      }
+      const nombreReal = usuario || localStorage.getItem('nombre_usuario');
+      const areaReal = localStorage.getItem('area_usuario'); 
+
+      const paqueteAEnviar = { 
+        ...formulario, 
+        solicitante: nombreReal,
+        area_origen: areaReal,
+        usuario_actual: nombreReal // Necesario para que el backend valide edición de descripción
+      };
+
+      const url = editandoId ? `${URL_API}/tickets/editar/${editandoId}` : `${URL_API}/tickets`;
+      const método = editandoId ? 'PUT' : 'POST';
+
+      const respuesta = await fetch(url, {
+        method: método,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paqueteAEnviar)
+      });
+
+      if (!respuesta.ok) throw new Error("Error en el servidor");
+      
       setMostrarModal(false);
-      setEditandoId(null);
+      setEditandoId(null); // Limpiamos el ID después de guardar
+      toast.success(editandoId ? "¡Ticket actualizado!" : "¡Ticket generado!");
+
     } catch (error) {
+      console.error(error);
       toast.error("Hubo un problema al procesar el ticket.");
     } finally {
       ocultarCarga();
     }
   };
-
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {
       const respuesta = await fetch(`${URL_API}/tickets/${idTabla}/estado`, {
@@ -173,18 +199,25 @@ useEffect(() => {
   };
 
   const eliminarTicket = async (idTabla) => {
-    const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
-    if (confirmar) {
-      try {
-        const respuesta = await fetch(`${URL_API}/tickets/${idTabla}`, { method: 'DELETE' });
-        if (!respuesta.ok) throw new Error("Fallo en servidor");
-        setTickets(prev => prev.filter((ticket) => ticket.id !== idTabla));
-        toast.error("Ticket eliminado del sistema.");
-      } catch (error) {
-        toast.error("Error al intentar eliminar.");
-      }
+  const confirmar = window.confirm("¿Estás seguro de eliminar este ticket?");
+  if (confirmar) {
+    try {
+      const rol = localStorage.getItem('rol_usuario');
+      const nombre = localStorage.getItem('nombre_usuario');
+      
+      const respuesta = await fetch(`${URL_API}/tickets/${idTabla}?rol=${rol}&nombre_usuario=${nombre}`, { 
+        method: 'DELETE' 
+      });
+
+      if (!respuesta.ok) throw new Error("No tienes permisos o hubo un error");
+      
+      setTickets(prev => prev.filter((ticket) => ticket.id !== idTabla));
+      toast.error("Ticket eliminado.");
+    } catch (error) {
+      toast.error("No se pudo eliminar el ticket.");
     }
-  };
+  }
+};
 
   // EXPORTAR HERRAMIENTAS
   return {
@@ -193,6 +226,6 @@ useEffect(() => {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, cargarTickets
   };
 };

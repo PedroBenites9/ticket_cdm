@@ -117,8 +117,7 @@ export default function Register({ cambiarVista }) {
                 </option>
               ))}
               </select>
-              {console.log(areasDisponibles)}
-              <button type="submit" className="btn btn-success w-100">
+                <button type="submit" className="btn btn-success w-100">
                 Registrarme
               </button>
             </form>

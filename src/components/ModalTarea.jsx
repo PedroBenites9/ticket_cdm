@@ -1,11 +1,28 @@
-import React from 'react';
-
-const ModalTarea = ({ 
-  mostrarModalTarea, setMostrarModalTarea, 
-  formularioTarea, setFormularioTarea, manejarDias, guardarTarea 
+import { useState, useEffect } from 'react';
+const ModalTarea = ({
+    mostrarModalTarea, setMostrarModalTarea,
+    formularioTarea, setFormularioTarea, manejarDias, guardarTarea,
+    URL_API
 }) => {
-  if (!mostrarModalTarea) return null;
+    
+    // 1. PRIMERO SIEMPRE LOS HOOKS
+    const [opciones, setOpciones] = useState({ categorias: [], frecuencias: [] });
 
+    useEffect(() => {
+        const cargarOpciones = async () => {
+            try {
+                const respuesta = await fetch(`${URL_API}/tareas/configuracion/opciones`);
+                const datos = await respuesta.json();
+                setOpciones(datos);
+            } catch (error) {
+                console.error("Error cargando opciones del servidor", error);
+            }
+        };
+        cargarOpciones();
+    }, [URL_API]); 
+
+    // 2. RECIÉN AHORA EL RETURN TEMPRANO
+    if (!mostrarModalTarea) return null;
   return (
     <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog">
@@ -23,39 +40,58 @@ const ModalTarea = ({
                 <input type="text" className="form-control" value={formularioTarea.titulo} onChange={(e) => setFormularioTarea({...formularioTarea, titulo: e.target.value})} required />
               </div>
               <div className="mb-3">
+                
+            {/* SELECT DE CATEGORÍA DINÁMICO */}
                 <label className="form-label fw-bold">Categoría</label>
                 <select 
-                    className="form-select border-primary" 
-                    value={formularioTarea.frecuencia} 
-                    onChange={(e) => {
-                        const nuevaFrecuencia = e.target.value;
-                        setFormularioTarea({
-                        ...formularioTarea, 
-                        frecuencia: nuevaFrecuencia,
-                        // 🧹 MAGIA: Limpiamos los datos del otro modo para no enviar basura a la BD
-                        dias_especificos: nuevaFrecuencia === 'Fecha Unica' ? [] : formularioTarea.dias_especificos,
-                        fecha_unica: nuevaFrecuencia === 'Dias Especificos' ? '' : formularioTarea.fecha_unica
-                        });
-                    }}
-                >   
-                    <option value="Limpieza / General">🧹 Limpieza</option>
-                    <option value="CCTV y Servidores">📹 CCTV</option>
-                    <option value="Redes">🌐 Redes</option>
-                    <option value="Reportes">📑 Reportes</option>
+                  className="form-select border-primary" 
+                  value={formularioTarea.categoria || ''} 
+                  onChange={(e) => setFormularioTarea({ ...formularioTarea, categoria: e.target.value })}
+                  required
+                  >
+                  <option value="">Seleccione Categoría...</option>
+                  {opciones.categorias.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
-              <div className="row">
-                <div className="col-6 mb-3">
-                  <label className="form-label fw-bold">Frecuencia</label>
-                  <select className="form-select" value={formularioTarea.frecuencia} onChange={(e) => setFormularioTarea({...formularioTarea, frecuencia: e.target.value})}>
-                    <option value="Dias Especificos">📅 Días Específicos</option>
-                    <option value="Fecha Unica">🎯 Tarea Mensual</option>
-                  </select>
-                </div>
-                <div className="col-6 mb-3">
-                  <label className="form-label fw-bold">Hora Límite</label>
-                  <input type="time" className="form-control" value={formularioTarea.hora_programada} onChange={(e) => setFormularioTarea({...formularioTarea, hora_programada: e.target.value})} required />
-                </div>
+
+             <div className="row">
+                  <div className="col-6 mb-3">
+                      <label className="form-label fw-bold">Frecuencia</label>
+                      <select 
+                          className="form-select"
+                          value={formularioTarea.frecuencia || ''}
+                          onChange={(e) => {
+                              const nuevaFrecuencia = e.target.value;
+                              setFormularioTarea({
+                                  ...formularioTarea,
+                                  frecuencia: nuevaFrecuencia,
+                                  dias_especificos: nuevaFrecuencia === 'Fecha Unica' ? [] : formularioTarea.dias_especificos,
+                                  fecha_unica: nuevaFrecuencia === 'Dias Especificos' ? '' : formularioTarea.fecha_unica
+                              });
+                          }}
+                          required
+                      >
+                          <option value="">Seleccione...</option>
+                          {opciones.frecuencias.map((frec) => (
+                              <option key={frec.codigo} value={frec.codigo}>
+                                  {frec.nombre_mostrar}
+                              </option>
+                          ))}
+                      </select>
+                  </div>
+
+                  <div className="col-6 mb-3">
+                      <label className="form-label fw-bold">Hora Límite</label>
+                      <input 
+                          type="time"
+                          className="form-control"
+                          value={formularioTarea.hora_programada || ''}
+                          onChange={(e) => setFormularioTarea({...formularioTarea, hora_programada: e.target.value})}
+                          required
+                      />
+                  </div>
               </div>
               {formularioTarea.frecuencia === 'Dias Especificos' && (
                 <div className="mb-3 p-3 bg-light border rounded shadow-sm">

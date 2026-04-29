@@ -13,14 +13,34 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
 
 
   // 2. FUNCIONES DE LÓGICA
-  const manejarDias = (diaId) => {
-    const { dias_especificos } = formularioTarea;
-    if (dias_especificos.includes(diaId)) {
-      setFormularioTarea({ ...formularioTarea, dias_especificos: dias_especificos.filter(d => d !== diaId) });
-    } else {
-      setFormularioTarea({ ...formularioTarea, dias_especificos: [...dias_especificos, diaId] });
-    }
-  };
+const manejarDias = (dia) => {
+    setFormularioTarea((estadoPrevio) => {
+        
+        let rawDias = estadoPrevio.dias_especificos;
+        let diasArray = [];
+
+        if (Array.isArray(rawDias)) {
+            diasArray = [...rawDias];
+        } else if (typeof rawDias === 'string') {
+            try {
+                let parseado = JSON.parse(rawDias);
+                diasArray = Array.isArray(parseado) ? parseado : [parseado];
+            } catch (error) {
+                diasArray = rawDias.trim() !== '' ? [rawDias.trim()] : [];
+            }
+        }
+        let nuevosDias;
+        if (diasArray.includes(dia)) {
+            nuevosDias = diasArray.filter(d => d !== dia);
+        } else {
+            nuevosDias = [...diasArray, dia];
+        }
+        return {
+            ...estadoPrevio,
+            dias_especificos: nuevosDias
+        };
+    });
+};
 
   const guardarTarea = async (e) => {
     e.preventDefault();
@@ -51,12 +71,16 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     }
   };
 
-  const marcarTareaCompletada = async (id) => {
+  const marcarTareaCompletada = async (id, formData) => {
     try {
+      // Agregamos el usuario al FormData si no viene
+      if (!formData.has('usuario')) {
+        formData.append('usuario', usuario);
+      }
+
       const respuesta = await fetch(`${URL_API}/tareas/${id}/completar`, { 
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario: usuario }) 
+        body: formData 
       });
       if (!respuesta.ok) throw new Error("El servidor falló al completar la tarea");
       
@@ -67,6 +91,7 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
       });
       toast.success("¡Excelente! Tarea completada. Quedó reprogramada.");
     } catch (error) {
+      console.error(error);
       toast.error("Error al actualizar la rutina.");
     }
   };
@@ -134,7 +159,9 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
         "Hora de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleTimeString() : 'Sin registro',
         "Fecha de Finalización": new Date(registro.fecha_completada).toLocaleDateString(),
         "Hora de Finalización": new Date(registro.fecha_completada).toLocaleTimeString(),
-        "Tiempo de Ejecución Real": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : 'Sin registro'
+        "Tiempo de Ejecución Real": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : 'Sin registro',
+        "Comentario": registro.comentario || 'Sin comentario',
+        "Evidencia (Archivo)": registro.archivo_adjunto ? `${URL_API.startsWith('http') ? URL_API : window.location.origin + URL_API}/tareas/archivo/${registro.archivo_adjunto.split(/[\\/]/).pop()}` : 'Sin archivo'
       }));  
       const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
       const libro = XLSX.utils.book_new();
@@ -232,17 +259,27 @@ export const useTareas = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   };
 
   const abrirModalEditarTarea = (tarea) => {
-  marcarComoVista(tarea.id);
-  setFormularioTarea({
-    id: tarea.id, 
-    titulo: tarea.titulo,
-    categoria: tarea.categoria,
-    frecuencia: tarea.frecuencia,
-    hora_programada: tarea.hora_programada,
-    dias_especificos: tarea.dias_especificos || [],
-    fecha_unica: tarea.fecha_unica ? tarea.fecha_unica.split('T')[0] : ''
-  });
-  setMostrarModalTarea(true);
+    let diasLimpios = [];
+    // 1. Verificamos cómo viene la información de la base de datos
+    if (Array.isArray(tarea.dias_especificos)) {
+        diasLimpios = tarea.dias_especificos;
+    } else if (typeof tarea.dias_especificos === 'string') {
+        try {
+            // Intenta leerlo si viene como un formato JSON puro: '["Vie"]'
+            diasLimpios = JSON.parse(tarea.dias_especificos);
+        } catch (e) {
+            // Si viene como texto sucio separado por comas: "Vie, Lun" o solo "Vie"
+            diasLimpios = tarea.dias_especificos.split(',').map(d => d.trim());
+        }
+    }
+    // 2. Cargamos el formulario con los días ya convertidos en un Array perfecto
+    setFormularioTarea({
+        ...tarea,
+        dias_especificos: diasLimpios 
+    });
+    console.log(formularioTarea);
+    // 3. Recién ahora abrimos el modal
+    setMostrarModalTarea(true); // O la variable que uses para abrirlo
 };
 
   // 3. EXPORTAMOS LO QUE MAIN.JSX NECESITA

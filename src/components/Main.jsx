@@ -22,26 +22,30 @@ import sonidoAlerta from '../assets/alarma.mp3';
 import ModalTicket from './ModalTicket';
 import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
+import ModalFinalizarTarea from './ModalFinalizarTarea';
 
-// const socket = io('https://back-tickets-u01r.onrender.com');
-const socket = io('http://localhost:3000');
+const socket = io(import.meta.env.VITE_URL_BACKEND || '/');
 
 export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 1. HOOKS PRINCIPALES
   // ==========================================
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
-  // const URL_API = 'https://back-tickets-u01r.onrender.com/api';
-  const URL_API = '/api';
+  const URL_API = import.meta.env.VITE_URL_API || '/api';
   const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
 
   // Hook de Tareas
+  const [filtroCategoriaTarea, setFiltroCategoriaTarea] = useState('Todas');
+  const [busquedaTarea, setBusquedaTarea] = useState('');
+  const [mostrarModalFinalizar, setMostrarModalFinalizar] = useState(false);
+  const [tareaSeleccionadaFinalizar, setTareaSeleccionadaFinalizar] = useState(null);
+
   const {
     tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
     marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
     exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,
-    indicadores, cargarIndicadores 
+    indicadores, cargarIndicadores, marcarComoVista
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
   // Hook de Tickets
@@ -67,6 +71,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroOrigen, setFiltroOrigen] = useState('Todos');
+  const [filtroPrioridad, setFiltroPrioridad] = useState('Todas');
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
 
@@ -82,8 +87,7 @@ export default function Main({ cambiarVista, usuario }) {
 
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
-  const [busquedaTarea, setBusquedaTarea] = useState('');
-  const [filtroCategoriaTarea, setFiltroCategoriaTarea] = useState('Todas');
+
 
   // ==========================================
   // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
@@ -157,15 +161,23 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   const ticketAbierto = tickets.find(t => t.id === editandoId);
   
+  // Hook para hacer "latir" a React cada 1 minuto
+  const [ticker, setTicker] = useState(0);
 
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
   // ==========================================
   useEffect(() => {
+    // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto)
+    const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
+    return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
+}, []);
+
+  useEffect(() => {
     // 1. Carga inicial tradicional (una sola vez)
     const obtenerDatos = async () => {
       try {
-        const respuestaTickets = await fetch(`${URL_API}/tickets`);
+        const respuestaTickets = await fetch(`${URL_API}/tickets?rol=${encodeURIComponent(rolUsuario)}&area=${encodeURIComponent(areaUsuario)}`);
         setTickets(await respuestaTickets.json());
         const respuestaClientes = await fetch(`${URL_API}/clientes`);
         setClientesLista(await respuestaClientes.json());
@@ -179,30 +191,45 @@ export default function Main({ cambiarVista, usuario }) {
       }
     };
     obtenerDatos();
-
   
     // ==================================================
     // 2. MAGIA WEBSOCKETS: TICKETS --> Escuchamos eventos en tiempo real
     // ==================================================
     
     // Si alguien crea un ticket, lo agregamos arriba de la lista y hacemos sonar la alerta
-    socket.on('ticketCreado', (nuevoTicket) => {
-      
-      // 1. LÓGICA DE ALERTA SONORA (Solo suena para IT, y si lo creó otra persona)
-      if (nuevoTicket.solicitante !== usuario && (rolUsuario === 'admin' || rolUsuario === 'tecnico')) {
-        const audio = new Audio(sonidoAlerta);
-        // Usamos catch porque algunos navegadores bloquean el sonido si el usuario no ha hecho clic en la pantalla antes
-        audio.play().catch(error => console.log("El navegador bloqueó el sonido automático", error));
-      }
+      socket.on('ticketCreado', (nuevoTicket) => {
+      // 1. REGLA DE PRIVACIDAD (La que ya teníamos)
+      const miRol = rolUsuario || localStorage.getItem('rol_usuario');
+      const miArea = areaUsuario || localStorage.getItem('area_usuario');
+      const miNombre = usuario || localStorage.getItem('nombre_usuario');
 
-      // 2. ACTUALIZAMOS LA PANTALLA
-      setTickets((ticketsAnteriores) => {
-        const yaExiste = ticketsAnteriores.some(ticket => ticket.id === nuevoTicket.id);
-        if (yaExiste) return ticketsAnteriores; 
+      const esAdminOTecnico = miRol === 'admin' || miRol === 'tecnico';
+      const esDeMiArea = nuevoTicket.area_origen === miArea;
+      const loCreeYo = nuevoTicket.solicitante === miNombre;
+
+      if (esAdminOTecnico || esDeMiArea || loCreeYo) {
         
-        return [nuevoTicket, ...ticketsAnteriores]; 
-      });
+        // 2. FILTRO ANTI-DUPLICADOS (La solución al problema)
+        setTickets((ticketsAnteriores) => {
+          // ¿Ya tengo un ticket con este ID en mi lista?
+          const yaExiste = ticketsAnteriores.some(t => t.id === nuevoTicket.id);
+          
+          // Si ya existe, devuelvo la lista como estaba (no hago nada)
+          if (yaExiste) {
+            return ticketsAnteriores;
+          }
+          
+          // Si es realmente nuevo, lo agrego arriba de todo
+          return [nuevoTicket, ...ticketsAnteriores];
+        });
+
+        // 3. SONIDO (Solo si no lo creé yo)
+        if (nuevoTicket.solicitante !== usuario) {
+          new Audio(sonidoAlerta).play().catch(e => {});
+        }
+      }
     });
+    
     // Si alguien edita o cambia de estado, actualizamos ese renglón específico
     socket.on('ticketModificado', (ticketEditado) => {
       setTickets((ticketsAnteriores) => 
@@ -340,10 +367,6 @@ export default function Main({ cambiarVista, usuario }) {
     XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
     toast.success("¡Reporte de Excel descargado con éxito!");
   };
-
-  // ==========================================
-  // NUEVO: Exportar Historial de Tareas a Excel
-  // ==========================================
   
   const abrirPanelUsuarios = async () => {
     try {
@@ -374,26 +397,34 @@ export default function Main({ cambiarVista, usuario }) {
   // 8. FILTRADO, ESTADÍSTICAS Y PAGINACIÓN
   // ==========================================
   const ticketsFiltrados = tickets.filter((ticket) => {
-    // 1. REGLA DE PRIVACIDAD: ¿Quién está mirando?
-    let permisoVer = false;
-    if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
-      permisoVer = true; 
-    } else {
-      permisoVer = ticket.solicitante === usuario; 
-    }
+  // 1. REGLA DE PRIVACIDAD
+  let permisoVer = false;
+  
+  if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
+    permisoVer = true; 
+  } else {
+    // ✅ CLAVE: Ve lo suyo O lo de su área
+    // Asegurate de que 'areaUsuario' sea el estado que tenés en Main.jsx
+    permisoVer = ticket.solicitante === usuario || ticket.area_origen === areaUsuario; 
+  }
+  
+  const busquedaLower = busqueda.toLowerCase();
+  const coincideBusqueda = 
+    ticket.asunto?.toLowerCase().includes(busquedaLower) || 
+    ticket.codigo?.toLowerCase().includes(busquedaLower) ||
+    ticket.solicitante?.toLowerCase().includes(busquedaLower) ||
+    ticket.cliente?.toLowerCase().includes(busquedaLower) ||
+    ticket.tecnico_asignado?.toLowerCase().includes(busquedaLower) ||
+    ticket.categoria?.toLowerCase().includes(busquedaLower) ||
+    ticket.prioridad?.toLowerCase().includes(busquedaLower) ||
+    ticket.estado?.toLowerCase().includes(busquedaLower);
     
-    const coincideBusqueda = 
-      ticket.asunto?.toLowerCase().includes(busqueda.toLowerCase()) || 
-      ticket.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      ticket.solicitante?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      (ticket.cliente && ticket.cliente.toLowerCase().includes(busqueda.toLowerCase()));
-      
-    const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
-    const origenDelTicket = ticket.tipo_origen || 'Interno'; 
-    const coincideOrigen = filtroOrigen === 'Todos' || origenDelTicket === filtroOrigen;
+  const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
+  const coincideOrigen = filtroOrigen === 'Todos' || (ticket.tipo_origen || 'Interno') === filtroOrigen;
+  const coincidePrioridad = filtroPrioridad === 'Todas' || ticket.prioridad === filtroPrioridad;
 
-    return permisoVer && coincideCategoria && coincideBusqueda && coincideOrigen;
-  });
+  return permisoVer && coincideCategoria && coincideOrigen && coincidePrioridad && coincideBusqueda;
+});
   // ==========================================
   // LÓGICA DE PAGINACIÓN
   // ==========================================
@@ -480,7 +511,14 @@ export default function Main({ cambiarVista, usuario }) {
   // LÓGICA DE FILTRADO PARA TAREAS / RUTINAS
   // ==========================================
   const tareasFiltradas = tareas.filter((tarea) => {
-    const coincideBusqueda = tarea.titulo?.toLowerCase().includes(busquedaTarea.toLowerCase());
+    const busquedaLower = busquedaTarea.toLowerCase();
+    const coincideBusqueda = 
+      tarea.titulo?.toLowerCase().includes(busquedaLower) || 
+      tarea.descripcion?.toLowerCase().includes(busquedaLower) ||
+      tarea.categoria?.toLowerCase().includes(busquedaLower) ||
+      tarea.frecuencia?.toLowerCase().includes(busquedaLower) ||
+      tarea.estado?.toLowerCase().includes(busquedaLower);
+
     const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
     return coincideBusqueda && coincideCategoria;
   });
@@ -669,49 +707,58 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         )}
 
-        {/* NUEVO: Filtros con las categorías reales de IT */}
-        {(rolUsuario  === 'admin' || rolUsuario === 'tecnico') && (
-          <>
-          <div className="row mb-3 gx-2">
+        {/* 10. Filtros Globales (Disponibles para todos los usuarios) */}
+        <div className="row mb-3 gx-2">
             
-            {/* 1. Buscador */}
-            <div className="col-md-5 mb-2 mb-md-0">
-              <div className="input-group shadow-sm">
-                <span className="input-group-text bg-white border-end-0">🔍</span>
-                <input type="text" className="form-control border-start-0" placeholder="Buscar por Código o Asunto..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-              </div>
+          {/* 1. Buscador */}
+          <div className="col-md-4 mb-2 mb-md-0">
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-white border-end-0">🔍</span>
+              <input type="text" className="form-control border-start-0" placeholder="Buscar en todas las columnas..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
             </div>
-
-            {/* 2. Filtro de Origen */}
-            <div className="col-md-3 mb-2 mb-md-0">
-              <div className="input-group shadow-sm">
-                <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Origen</span>
-                <select className="form-select" value={filtroOrigen} onChange={(e) => setFiltroOrigen(e.target.value)}>
-                  <option value="Todos">Todos</option>
-                  <option value="Interno">🏢 Internos</option>
-                  <option value="Externo">🤝 Externos</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 3. Filtro de Categoría */}
-            <div className="col-md-4">
-              <div className="input-group shadow-sm">
-                <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Categoría</span>
-                <select className="form-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
-                  <option value="Todas">Todas</option>
-                  <option value="Redes e Internet">🌐 Redes</option>
-                  <option value="Active Directory / Accesos">🔑 Accesos</option>
-                  <option value="Hardware e Insumos">💻 Hardware</option>
-                  <option value="Software y SO">💽 Software</option>
-                  <option value="CCTV">📹 CCTV</option>
-                </select>
-              </div>
-            </div>
-
           </div>
-          </>
-        )}
+
+          {/* 2. Filtro de Origen */}
+          <div className="col-md-2 mb-2 mb-md-0">
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Origen</span>
+              <select className="form-select" value={filtroOrigen} onChange={(e) => setFiltroOrigen(e.target.value)}>
+                <option value="Todos">Todos</option>
+                <option value="Interno">🏢 Internos</option>
+                <option value="Externo">🤝 Externos</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 3. Filtro de Categoría */}
+          <div className="col-md-3 mb-2 mb-md-0">
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Categoría</span>
+              <select className="form-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+                <option value="Todas">Todas</option>
+                <option value="Redes e Internet">🌐 Redes</option>
+                <option value="Active Directory / Accesos">🔑 Accesos</option>
+                <option value="Hardware e Insumos">💻 Hardware</option>
+                <option value="Software y SO">💽 Software</option>
+                <option value="CCTV">📹 CCTV</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 4. Filtro de Prioridad */}
+          <div className="col-md-3">
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Prioridad</span>
+              <select className="form-select" value={filtroPrioridad} onChange={(e) => setFiltroPrioridad(e.target.value)}>
+                <option value="Todas">Todas</option>
+                <option value="Baja">🟢 Baja</option>
+                <option value="Media">🟡 Media</option>
+                <option value="Alta">🟠 Alta</option>
+                <option value="Urgente">🔴 Urgente</option>
+              </select>
+            </div>
+          </div>
+        </div>
         
         <div className="card shadow-sm" ref={tablaTicketsRef}>
           {/* <div className="card-body p-0 table-responsive" style={{ minHeight: '650px' }}> */}
@@ -726,6 +773,7 @@ export default function Main({ cambiarVista, usuario }) {
                   )}
                   <th>Asunto</th>
                   <th>Categoría</th>
+                  <th>Prioridad</th>
                   <th>Técnico</th> 
                   <th>Estado</th>
                   <th>Acciones</th> 
@@ -733,7 +781,7 @@ export default function Main({ cambiarVista, usuario }) {
               </thead>
               <tbody>
                 {cargando ? (
-                  <tr><td colSpan="7">Cargando...</td></tr>
+                  <tr><td colSpan="10">Cargando...</td></tr>
                 ) : ticketsPaginados.length > 0 ? (ticketsPaginados.map((ticket) => (
                    <tr key={ticket.id}>
                       {/* 1. Código */}
@@ -755,10 +803,28 @@ export default function Main({ cambiarVista, usuario }) {
                         </td>
                       )}
                       {/* 4. Asunto */}
-                      <td>{ticket.asunto}</td>
+                      <td>{ticket.asunto}
+                        
+                      </td>
                       
                       {/* 5. Categoría */}
                       <td>{ticket.categoria}</td>
+                      
+                      {/* 5b. Prioridad */}
+                      <td>
+                        <span className={`badge shadow-sm ${
+                          ticket.prioridad === 'Urgente' ? 'bg-danger animate__animated animate__pulse animate__infinite' :
+                          ticket.prioridad === 'Alta'    ? 'bg-warning text-dark' :
+                          ticket.prioridad === 'Media'   ? 'bg-primary' :
+                                                          'bg-light text-dark border'
+                        }`}>
+                          {ticket.prioridad === 'Urgente' && '🚨 '}
+                          {ticket.prioridad === 'Alta' && '⚠️ '}
+                          {ticket.prioridad === 'Media' && '🔷 '}
+                          {ticket.prioridad === 'Baja' && '🍃 '}
+                          {ticket.prioridad}
+                        </span>
+                      </td>
                       
                       {/* 6. Técnico */}
                       <td><span className="badge bg-light text-dark border">{ticket.tecnico_asignado || 'Sin asignar'}</span></td>
@@ -774,54 +840,56 @@ export default function Main({ cambiarVista, usuario }) {
                           )}
                         </div>
                       </td>
-
-                      {/* 8. Acciones */}
                       <td>
                         {ticket.estado === 'Cerrado Definitivo' ? (
-                         <div className="d-flex justify-content-center align-items-center gap-2">
-                            <span className="badge bg-light text-dark border p-2">🔒 Archivado</span>
-                            {/* NUEVO: Botón para ver el ticket bloqueado */}
-                            <button className="btn btn-secondary btn-sm text-white shadow-sm" title="Ver Historial" onClick={() => abrirModalEditar(ticket)}>
-                              👁️ Ver
-                            </button>
+                          <div className="d-flex justify-content-center align-items-center gap-2">
+                             <span className="badge bg-light text-dark border p-2">🔒 Archivado</span>
+                             <button className="btn btn-secondary btn-sm text-white shadow-sm" title="Ver Historial" onClick={() => abrirModalEditar(ticket)}>
+                               👁️ Ver
+                             </button>
                           </div>
                         ) : (
                           <div className="d-flex justify-content-center align-items-center gap-1">
-                            {/* ... (Aquí siguen tus otros botones que ya tenías: el select, asignarme, editar, eliminar) ... */}
-                            {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
-                              <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
-                                <option value="Abierto">Abierto</option>
-                                <option value="En Proceso">En Proceso</option>
-                                <option value="Resuelto" className="fw-bold text-success">Resuelto</option>
-                              </select>
-                            )}
-                            {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
-                              <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
-                            )}   
-                           {(rolUsuario === 'final' || rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
-                              <button 
-                                className="btn btn-warning btn-sm text-white position-relative" 
-                                title="Abrir y Editar" 
-                                onClick={() => abrirModalEditar(ticket)}
-                              >
-                                ✏️
-                                {ticketsConMensaje.includes(ticket.id) && (
-                                  <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle shadow-sm" style={{ width: '12px', height: '12px' }}>
-                                    <span className="visually-hidden">Mensajes nuevos</span>
-                                  </span>
-                                )}
-                              </button>
-                            )}
+                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                               <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
+                                 <option value="Abierto">Abierto</option>
+                                 <option value="En Proceso">En Proceso</option>
+                                 <option value="Resuelto" className="fw-bold text-success">Resuelto</option>
+                               </select>
+                             )}
+                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                               <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
+                             )}   
+                             <button 
+                               className="btn btn-warning btn-sm text-white position-relative" 
+                               title="Abrir y Editar" 
+                               onClick={() => abrirModalEditar(ticket)}
+                             >
+                               ✏️
+                               {ticketsConMensaje.includes(ticket.id) && (
+                                 <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle shadow-sm" style={{ width: '12px', height: '12px' }}>
+                                   <span className="visually-hidden">Mensajes nuevos</span>
+                                 </span>
+                               )}
+                             </button>
+                             {(rolUsuario === 'admin' || ticket.solicitante === (usuario || localStorage.getItem('nombre_usuario'))) && (
+                               <button 
+                                 className="btn btn-danger btn-sm" 
+                                 title="Eliminar Ticket"
+                                 onClick={() => eliminarTicket(ticket.id)}
+                               >
+                                 🗑️
+                               </button>
+                             )}
                           </div>
                         )}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="7" className="text-muted py-3">No hay tickets registrados.</td>
-                  </tr>
-                )}
+                  ))) : (
+                    <tr>
+                      <td colSpan="10" className="text-muted py-3 text-center">No hay tickets registrados.</td>
+                    </tr>
+                  )}
               </tbody>
             </table>
           </div>
@@ -911,8 +979,23 @@ export default function Main({ cambiarVista, usuario }) {
                   <tbody>
                    {tareasFiltradas.length > 0 ? (tareasFiltradas.map(tarea => {
                         // Verificamos si la tarea ya se completó hoy
-                       const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
-                       const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
+                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
+                        const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
+
+                        // 👇 AGREGAMOS ESTA MATEMÁTICA ACÁ 👇
+                        let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
+                        
+                        // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
+                        if (tarea.estado === 'En Curso' && tarea.fecha_inicio_real) {
+                            // new Date() se actualiza gracias al "ticker" del Paso 1
+                            const milisegundosPasados = new Date() - new Date(tarea.fecha_inicio_real);
+                            const minutosExtra = milisegundosPasados / 1000 / 60;
+                            
+                            // Evitamos que muestre números negativos si hay un micro-desfase de servidor
+                            if (minutosExtra > 0) {
+                                minutosMostrados += minutosExtra;
+                            }
+                        }
                         // console.log(completadaHoy);
                         return (
                           <tr 
@@ -963,7 +1046,6 @@ export default function Main({ cambiarVista, usuario }) {
                                   </button>
                                 </div>
                               ) : tareaFutura ? (
-                                /* NUEVO: SI ES DEL FUTURO, MOSTRAMOS UN RELOJ DE ARENA EN LUGAR DE LOS BOTONES */
                                 <div className="d-flex justify-content-center align-items-center gap-2">
                                   <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
                                     ⏳ Esperando fecha
@@ -995,10 +1077,13 @@ export default function Main({ cambiarVista, usuario }) {
                                       </button>
                                     )}
 
-                                    {/* Botón FINALIZAR */}
+                                    {/* Botón FINALIZAR (Ahora abre un modal para pedir comentario) */}
                                     <button 
                                       className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
-                                      onClick={() => marcarTareaCompletada(tarea.id)}
+                                      onClick={() => {
+                                        setTareaSeleccionadaFinalizar(tarea);
+                                        setMostrarModalFinalizar(true);
+                                      }}
                                       title="Finalizar tarea"
                                     >
                                       ✅ Finalizar
@@ -1015,13 +1100,17 @@ export default function Main({ cambiarVista, usuario }) {
                                     
                                   </div>
                                   
-                                  {/* Mostramos los minutos acumulados abajo de los botones */}
-                                  {tarea.tiempo_acumulado_minutos > 0 && !completadaHoy && (
-                                    <div className="text-muted mt-1" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                      ⏱️ {Math.floor(tarea.tiempo_acumulado_minutos)} min dedicados
-                                    </div>
-                                  )}
-                                
+                               {/* Mostramos los minutos acumulados y el cronómetro en vivo */}
+                                    {(tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && !completadaHoy && (
+                                        <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            ⏱️ {Math.floor(minutosMostrados)} min dedicados
+                                            
+                                            {/* Indicador visual de que está corriendo */}
+                                            {tarea.estado === 'En Curso' && !tarea.en_pausa && (
+                                                <span className="ms-1 text-primary"> (corriendo...)</span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                               )}
                               <button 
@@ -1070,6 +1159,13 @@ export default function Main({ cambiarVista, usuario }) {
         mostrarModalTarea={mostrarModalTarea} setMostrarModalTarea={setMostrarModalTarea}
         formularioTarea={formularioTarea} setFormularioTarea={setFormularioTarea}
         manejarDias={manejarDias} guardarTarea={guardarTarea}
+        URL_API={URL_API}
+      />
+      <ModalFinalizarTarea 
+        mostrar={mostrarModalFinalizar} 
+        setMostrar={setMostrarModalFinalizar}
+        tarea={tareaSeleccionadaFinalizar}
+        marcarTareaCompletada={marcarTareaCompletada}
       />
     </motion.div>
   );
