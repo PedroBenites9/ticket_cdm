@@ -160,8 +160,11 @@ const guardarTicket = async (e) => {
       if (!respuesta.ok) throw new Error("Error en el servidor");
       
       setMostrarModal(false);
-      setEditandoId(null); // Limpiamos el ID después de guardar
+      setEditandoId(null); 
       toast.success(editandoId ? "¡Ticket actualizado!" : "¡Ticket generado!");
+
+      // 👇 AGREGAR ESTA LÍNEA: Fuerzo a recargar mis tickets inmediatamente
+      await cargarTickets();
 
     } catch (error) {
       console.error(error);
@@ -169,6 +172,7 @@ const guardarTicket = async (e) => {
     } finally {
       ocultarCarga();
     }
+    
   };
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {

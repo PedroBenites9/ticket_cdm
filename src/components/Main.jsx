@@ -74,6 +74,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [filtroPrioridad, setFiltroPrioridad] = useState('Todas');
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
+  const [ordenTickets, setOrdenTickets] = useState('desc');
 
   // Paginación de Tickets
   const [paginaActual, setPaginaActual] = useState(1);
@@ -206,7 +207,6 @@ export default function Main({ cambiarVista, usuario }) {
       const esAdminOTecnico = miRol === 'admin' || miRol === 'tecnico';
       const esDeMiArea = nuevoTicket.area_origen === miArea;
       const loCreeYo = nuevoTicket.solicitante === miNombre;
-
       if (esAdminOTecnico || esDeMiArea || loCreeYo) {
         
         // 2. FILTRO ANTI-DUPLICADOS (La solución al problema)
@@ -396,43 +396,68 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 8. FILTRADO, ESTADÍSTICAS Y PAGINACIÓN
   // ==========================================
-  const ticketsFiltrados = tickets.filter((ticket) => {
-  // 1. REGLA DE PRIVACIDAD
-  let permisoVer = false;
-  
-  if (rolUsuario === 'admin' || rolUsuario === 'tecnico') {
-    permisoVer = true; 
-  } else {
-    // ✅ CLAVE: Ve lo suyo O lo de su área
-    // Asegurate de que 'areaUsuario' sea el estado que tenés en Main.jsx
-    permisoVer = ticket.solicitante === usuario || ticket.area_origen === areaUsuario; 
-  }
-  
-  const busquedaLower = busqueda.toLowerCase();
-  const coincideBusqueda = 
-    ticket.asunto?.toLowerCase().includes(busquedaLower) || 
-    ticket.codigo?.toLowerCase().includes(busquedaLower) ||
-    ticket.solicitante?.toLowerCase().includes(busquedaLower) ||
-    ticket.cliente?.toLowerCase().includes(busquedaLower) ||
-    ticket.tecnico_asignado?.toLowerCase().includes(busquedaLower) ||
-    ticket.categoria?.toLowerCase().includes(busquedaLower) ||
-    ticket.prioridad?.toLowerCase().includes(busquedaLower) ||
-    ticket.estado?.toLowerCase().includes(busquedaLower);
-    
-  const coincideCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria;
-  const coincideOrigen = filtroOrigen === 'Todos' || (ticket.tipo_origen || 'Interno') === filtroOrigen;
-  const coincidePrioridad = filtroPrioridad === 'Todas' || ticket.prioridad === filtroPrioridad;
 
-  return permisoVer && coincideCategoria && coincideOrigen && coincidePrioridad && coincideBusqueda;
-});
+  const ticketsFiltrados = tickets.filter(ticket => {
+    // 1. Evitamos errores si algún texto viene nulo o indefinido
+    const asuntoSafe = ticket.asunto || '';
+    const codigoSafe = ticket.codigo || '';
+    const areaSafe = ticket.area_origen || '';
+    const solicitanteSafe = ticket.solicitante || '';
+
+    // 2. Filtros de la barra superior
+    const matchBusqueda = !busqueda || asuntoSafe.toLowerCase().includes(busqueda.toLowerCase()) || codigoSafe.toLowerCase().includes(busqueda.toLowerCase());
+    const matchOrigen = filtroOrigen === 'Todos' || ticket.tipo_origen === filtroOrigen;
+    
+    // (Permitimos que pase si la categoría está vacía, como en tu ticket de prueba)
+    const matchCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria || ticket.categoria === ''; 
+    const matchPrioridad = filtroPrioridad === 'Todas' || ticket.prioridad === filtroPrioridad;
+
+    // 3. Filtro de Privacidad (Capa 2) ¡Inmune a mayúsculas y espacios extras!
+    const miRol = (rolUsuario || localStorage.getItem('rol_usuario') || '').toLowerCase().trim();
+    const miArea = (localStorage.getItem('area_usuario') || '').toLowerCase().trim();
+    const miNombre = (usuario || localStorage.getItem('nombre_usuario') || '').toLowerCase().trim();
+
+    const esAdminOTecnico = miRol === 'admin' || miRol === 'tecnico';
+    const esDeMiArea = areaSafe.toLowerCase().trim() === miArea;
+    const loCreeYo = solicitanteSafe.toLowerCase().trim() === miNombre;
+
+    const matchPrivacidad = esAdminOTecnico || esDeMiArea || loCreeYo;
+
+    // Solo se muestra en la tabla si pasa todas las pruebas
+    return matchBusqueda && matchOrigen && matchCategoria && matchPrioridad && matchPrivacidad;
+  });
+
+ // ==========================================
+  // LÓGICA DE ORDENAMIENTO (Menú Desplegable)
   // ==========================================
-  // LÓGICA DE PAGINACIÓN
+  const ticketsOrdenados = [...ticketsFiltrados].sort((a, b) => {
+    
+    if (ordenTickets === 'fecha_desc') {
+      // Usamos el ID en lugar de la fecha. ¡El ID más grande siempre es el más nuevo!
+      return b.id - a.id; 
+    }
+    if (ordenTickets === 'fecha_asc') {
+      return a.id - b.id; // El ID más chico es el más antiguo
+    }
+    if (ordenTickets === 'prioridad') {
+      const peso = { 'Urgente': 4, 'Alta': 3, 'Media': 2, 'Baja': 1 };
+      return (peso[b.prioridad] || 0) - (peso[a.prioridad] || 0); // Urgentes arriba
+    }
+    if (ordenTickets === 'estado') {
+      const peso = { 'Abierto': 1, 'En Proceso': 2, 'Resuelto': 3, 'Cerrado Definitivo': 4 };
+      return (peso[a.estado] || 0) - (peso[b.estado] || 0); // Abiertos arriba
+    }
+    return 0;
+  });
+
+  // ==========================================
+  // LÓGICA DE PAGINACIÓN (Actualizada)
   // ==========================================
   const indiceUltimoTicket = paginaActual * ticketsPorPagina;
   const indicePrimerTicket = indiceUltimoTicket - ticketsPorPagina;
   
-  // Extraemos solo los tickets que van en la página actual
-  const ticketsPaginados = ticketsFiltrados.slice(indicePrimerTicket, indiceUltimoTicket);
+  // ¡IMPORTANTE! Cambiamos ticketsFiltrados por ticketsOrdenados acá:
+  const ticketsPaginados = ticketsOrdenados.slice(indicePrimerTicket, indiceUltimoTicket);
   
   // Calculamos cuántas páginas hay en total
   const totalPaginas = Math.ceil(ticketsFiltrados.length / ticketsPorPagina);
@@ -442,11 +467,10 @@ export default function Main({ cambiarVista, usuario }) {
     setPaginaActual(1);
   }, [busqueda, filtroCategoria, filtroOrigen]);
 
-  const totalTickets = tickets.length;
   const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
   const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
   const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
-
+  const totalTickets = ticketsAbiertos + ticketsEnProceso + ticketsResueltos;  
   const datosEstado = [
     { name: 'Abiertos', value: ticketsAbiertos },
     { name: 'En Proceso', value: ticketsEnProceso },
@@ -711,10 +735,10 @@ export default function Main({ cambiarVista, usuario }) {
         <div className="row mb-3 gx-2">
             
           {/* 1. Buscador */}
-          <div className="col-md-4 mb-2 mb-md-0">
+          <div className="col-md-3 mb-2 mb-md-0">
             <div className="input-group shadow-sm">
               <span className="input-group-text bg-white border-end-0">🔍</span>
-              <input type="text" className="form-control border-start-0" placeholder="Buscar en todas las columnas..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+              <input type="text" className="form-control border-start-0" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
             </div>
           </div>
 
@@ -731,7 +755,7 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
 
           {/* 3. Filtro de Categoría */}
-          <div className="col-md-3 mb-2 mb-md-0">
+          <div className="col-md-2 mb-2 mb-md-0">
             <div className="input-group shadow-sm">
               <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Categoría</span>
               <select className="form-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
@@ -746,7 +770,7 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
 
           {/* 4. Filtro de Prioridad */}
-          <div className="col-md-3">
+          <div className="col-md-2 mb-2 mb-md-0">
             <div className="input-group shadow-sm">
               <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Prioridad</span>
               <select className="form-select" value={filtroPrioridad} onChange={(e) => setFiltroPrioridad(e.target.value)}>
@@ -755,6 +779,19 @@ export default function Main({ cambiarVista, usuario }) {
                 <option value="Media">🟡 Media</option>
                 <option value="Alta">🟠 Alta</option>
                 <option value="Urgente">🔴 Urgente</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 5. NUEVO: Ordenar Por */}
+          <div className="col-md-3">
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-dark text-white fw-bold" style={{fontSize: '0.85rem'}}>Ordenar por</span>
+              <select className="form-select border-dark" value={ordenTickets} onChange={(e) => setOrdenTickets(e.target.value)}>
+                <option value="fecha_desc">🕒 Más Recientes</option>
+                <option value="fecha_asc">⏳ Más Antiguos</option>
+                <option value="prioridad">🚨 Prioridad (Urgentes primero)</option>
+                <option value="estado">📊 Estado (Abiertos primero)</option>
               </select>
             </div>
           </div>
@@ -783,7 +820,8 @@ export default function Main({ cambiarVista, usuario }) {
                 {cargando ? (
                   <tr><td colSpan="10">Cargando...</td></tr>
                 ) : ticketsPaginados.length > 0 ? (ticketsPaginados.map((ticket) => (
-                   <tr key={ticket.id}>
+                   <tr key={ticket.id} title={ticket.descripcion} 
+                    style={{ cursor: 'pointer' }}>
                       {/* 1. Código */}
                       <td className="fw-bold">{ticket.codigo}</td>
                       
