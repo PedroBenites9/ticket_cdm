@@ -1116,7 +1116,7 @@ export default function Main({ cambiarVista, usuario }) {
                                 {completadaHoy ? (
                                   /* Si ya está lista, mostramos la próxima ejecución amigablemente */
                                   <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
-                                    Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                    Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                                   </span>
                                 ) : (
                                   /* Si NO está lista, mostramos el tiempo Y el estado visual inteligente */
