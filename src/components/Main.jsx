@@ -63,6 +63,20 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
 
   const tablaTicketsRef = useRef(null);
+  
+  const coloresEstado = {
+    'En proceso': 'bg-warning text-dark border-warning',
+    'En pausa': 'bg-secondary',
+    'Atrasada': 'bg-danger',
+    'Esperando fecha': 'bg-light text-dark border'
+  };
+
+  const iconosEstado = {
+    'En proceso': '▶️',
+    'En pausa': '⏸',
+    'Atrasada': '⚠️',
+    'Esperando fecha': '⏳'
+  };
 
   // ==========================================
   // 3. ESTADOS DE LA APLICACIÓN
@@ -160,7 +174,15 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
-  const ticketAbierto = tickets.find(t => t.id === editandoId);
+  // Filtramos todas las tareas que NO fueron completadas hoy
+  const tareasActivas = tareas.filter(t => !fueCompletadaHoy(t.ultima_vez_completada));
+  
+  const totalPendientes = tareasActivas.length;
+  const rutinasEnProceso = tareasActivas.filter(t => t.estado === 'En Curso').length;
+  const rutinasAtrasadas = tareasActivas.filter(t => new Date(t.proxima_ejecucion) < new Date()).length;
+  
+  // Las finalizadas son únicamente las que YA se hicieron hoy
+  const rutinasFinalizadas = tareas.filter(t => fueCompletadaHoy(t.ultima_vez_completada)).length;
   
   // Hook para hacer "latir" a React cada 1 minuto
   const [ticker, setTicker] = useState(0);
@@ -983,7 +1005,41 @@ export default function Main({ cambiarVista, usuario }) {
                   + Nuevo
                 </button>
               </div>
-            
+
+            <div className="row mt-4 mb-4">
+              <div className="col-md-3 col-6 mb-3">
+                <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
+                  <div className="card-body py-3">
+                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Pendientes Totales</h6>
+                    <h3 className="mb-0 fw-bold">{totalPendientes}</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3 col-6 mb-3">
+                <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
+                  <div className="card-body py-3">
+                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Curso</h6>
+                    <h3 className="mb-0 fw-bold">{rutinasEnProceso}</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3 col-6 mb-3">
+                <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
+                  <div className="card-body py-3">
+                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Atrasadas</h6>
+                    <h3 className="mb-0 fw-bold animate__animated animate__pulse animate__infinite">{rutinasAtrasadas}</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3 col-6 mb-3">
+                <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
+                  <div className="card-body py-3">
+                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Finalizadas Hoy</h6>
+                    <h3 className="mb-0 fw-bold">{rutinasFinalizadas}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="card shadow-sm border-0">
               {/* NUEVO: Filtros y Buscador de Tareas */}
             <div className="d-flex flex-wrap gap-2 mt-4 mb-3">
@@ -1056,17 +1112,29 @@ export default function Main({ cambiarVista, usuario }) {
                             </td>
                            
                             <td>
-                              <div className="d-flex flex-column align-items-center">
+                              <div className="d-flex flex-column align-items-center gap-1">
                                 {completadaHoy ? (
                                   /* Si ya está lista, mostramos la próxima ejecución amigablemente */
                                   <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
                                     Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
                                   </span>
                                 ) : (
-                                  /* Si NO está lista, mostramos Atrasada o Esperando Fecha como tenías antes */
-                                  <span className={`fw-bold px-2 py-1 rounded ${new Date(tarea.proxima_ejecucion) < new Date() ? 'bg-danger text-white' : 'bg-warning text-dark'}`}>
-                                    {calcularTiempoTarea(tarea)}
-                                  </span>
+                                  /* Si NO está lista, mostramos el tiempo Y el estado visual inteligente */
+                                  <>
+                                    {/* 1. Mostramos la cuenta regresiva o la hora programada original */}
+                                    <small className="text-muted fw-bold d-block mb-1">
+                                      {tarea.estado_visual === 'Esperando fecha' 
+                                        ? calcularTiempoTarea(tarea) 
+                                        : `Prog: ${new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR')} ${tarea.hora_programada?.substring(0, 5)}`}
+                                    </small>
+
+                                    {/* 2. El badge dinámico SOLO aparece cuando hay un estado crítico o activo */}
+                                    {tarea.estado_visual !== 'Esperando fecha' && (
+                                      <span className={`badge ${coloresEstado[tarea.estado_visual]} shadow-sm px-2 py-1`} style={{ fontSize: '0.8rem' }}>
+                                        {iconosEstado[tarea.estado_visual]} {tarea.estado_visual}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1093,27 +1161,26 @@ export default function Main({ cambiarVista, usuario }) {
                               ):(
                                 <div className="d-flex justify-content-center flex-column align-items-center gap-2">
                                   <div className="d-flex gap-2 align-items-center">
-                                    {/* Si está Pausada o Pendiente: Botón de INICIAR */}
-                                    {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa) && (
+                                     {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa === 1) ? (
                                       <button 
                                         className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
-                                        onClick={() => iniciarTarea(tarea.id)}
+                                        onClick={() => iniciarTarea(tarea.id)} 
                                         title="Iniciar o Reanudar tarea"
                                       >
                                         ▶ Iniciar
                                       </button>
-                                    )}
+                                    ) : null}
 
                                     {/* Si está En Curso: Botón de PAUSAR */}
-                                    {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
+                                    {(tarea.estado === 'En Curso' && tarea.en_pausa === 0) ? (
                                       <button 
                                         className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
-                                        onClick={() => pausarTarea(tarea.id)}
+                                        onClick={() => pausarTarea(tarea.id)} 
                                         title="Pausar por una emergencia"
                                       >
                                         ⏸ Pausar
                                       </button>
-                                    )}
+                                    ) : null}
 
                                     {/* Botón FINALIZAR (Ahora abre un modal para pedir comentario) */}
                                     <button 
