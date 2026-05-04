@@ -1076,7 +1076,6 @@ export default function Main({ cambiarVista, usuario }) {
                         const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
                         const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
 
-                        // 👇 AGREGAMOS ESTA MATEMÁTICA ACÁ 👇
                         let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
                         
                         // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
@@ -1114,12 +1113,10 @@ export default function Main({ cambiarVista, usuario }) {
                             <td>
                               <div className="d-flex flex-column align-items-center gap-1">
                                 {completadaHoy ? (
-                                  /* Si ya está lista, mostramos la próxima ejecución amigablemente */
                                   <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
                                     Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
                                   </span>
                                 ) : (
-                                  /* Si NO está lista, mostramos el tiempo Y el estado visual inteligente */
                                   <>
                                     {/* 1. Mostramos la cuenta regresiva o la hora programada original */}
                                     <small className="text-muted fw-bold d-block mb-1">
@@ -1139,92 +1136,97 @@ export default function Main({ cambiarVista, usuario }) {
                               </div>
                             </td>
                             {/* 5. Acciones y Botones del Cronómetro */}
-                            <td className="d-flex justify-content-center align-items-center gap-2">
-                              
-                              {completadaHoy ? (
-                                <div className="d-flex justify-content-center align-items-center gap-2">
-                                  <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
-                                    ✔️ Lista por hoy
-                                  </span>
-                                  {/* Botón Eliminar cuando ya está completada */}
-                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                    🗑️
-                                  </button>
-                                </div>
-                              ) : tareaFutura ? (
-                                <div className="d-flex justify-content-center align-items-center gap-2">
-                                  <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
-                                    ⏳ Esperando fecha
-                                  </span>
-                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>🗑️</button>
-                                </div>
-                              ):(
-                                <div className="d-flex justify-content-center flex-column align-items-center gap-2">
-                                  <div className="d-flex gap-2 align-items-center">
-                                     {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa === 1) ? (
-                                      <button 
-                                        className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
-                                        onClick={() => iniciarTarea(tarea.id)} 
-                                        title="Iniciar o Reanudar tarea"
-                                      >
-                                        ▶ Iniciar
-                                      </button>
-                                    ) : null}
+                            <td className="align-middle">
+                              {/* Contenedor principal: Columna vertical centrada */}
+                              <div className="d-flex flex-column align-items-center gap-1">
 
-                                    {/* Si está En Curso: Botón de PAUSAR */}
-                                    {(tarea.estado === 'En Curso' && tarea.en_pausa === 0) ? (
-                                      <button 
-                                        className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
-                                        onClick={() => pausarTarea(tarea.id)} 
-                                        title="Pausar por una emergencia"
-                                      >
-                                        ⏸ Pausar
-                                      </button>
-                                    ) : null}
-
-                                    {/* Botón FINALIZAR (Ahora abre un modal para pedir comentario) */}
-                                    <button 
-                                      className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
-                                      onClick={() => {
-                                        setTareaSeleccionadaFinalizar(tarea);
-                                        setMostrarModalFinalizar(true);
-                                      }}
-                                      title="Finalizar tarea"
-                                    >
-                                      ✅ Finalizar
-                                    </button>
-                                    
-                                    {/* BOTÓN DE ELIMINAR */}
-                                    <button 
-                                      className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
-                                      title="Eliminar Rutina" 
-                                      onClick={() => eliminarTarea(tarea.id)}
-                                    >
-                                      🗑️
-                                    </button>
-                                    
-                                  </div>
+                                <div className="d-flex align-items-center justify-content-center gap-2">
                                   
-                               {/* Mostramos los minutos acumulados y el cronómetro en vivo */}
-                                    {(tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && !completadaHoy && (
-                                        <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            ⏱️ {Math.floor(minutosMostrados)} min dedicados
-                                            
-                                            {/* Indicador visual de que está corriendo */}
-                                            {tarea.estado === 'En Curso' && !tarea.en_pausa && (
-                                                <span className="ms-1 text-primary"> (corriendo...)</span>
-                                            )}
-                                        </div>
-                                    )}
+                                  {completadaHoy ? (
+                                    <>
+                                      <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
+                                        ✔️ Lista por hoy
+                                      </span>
+                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
+                                        🗑️
+                                      </button>
+                                    </>
+                                  ) : tareaFutura ? (
+                                    <>
+                                      <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
+                                        ⏳ Esperando fecha
+                                      </span>
+                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
+                                        🗑️
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Botón Iniciar */}
+                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa === 1) && (
+                                        <button 
+                                          className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
+                                          onClick={() => iniciarTarea(tarea.id)} 
+                                          title="Iniciar o Reanudar tarea"
+                                        >
+                                          ▶ Iniciar
+                                        </button>
+                                      )}
+
+                                      {/* Botón Pausar */}
+                                      {(tarea.estado === 'En Curso' && tarea.en_pausa === 0) && (
+                                        <button 
+                                          className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
+                                          onClick={() => pausarTarea(tarea.id)} 
+                                          title="Pausar por una emergencia"
+                                        >
+                                          ⏸ Pausar
+                                        </button>
+                                      )}
+
+                                      {/* Botón Finalizar */}
+                                      <button 
+                                        className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
+                                        onClick={() => {
+                                          setTareaSeleccionadaFinalizar(tarea);
+                                          setMostrarModalFinalizar(true);
+                                        }}
+                                        title="Finalizar tarea"
+                                      >
+                                        ✅ Finalizar
+                                      </button>
+                                      
+                                      {/* Botón Eliminar */}
+                                      <button 
+                                        className="btn btn-outline-danger btn-sm shadow-sm" 
+                                        title="Eliminar Rutina" 
+                                        onClick={() => eliminarTarea(tarea.id)}
+                                      >
+                                        🗑️
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {/* Botón Editar (Siempre visible y alineado al final) */}
+                                  <button 
+                                    className="btn btn-outline-warning btn-sm shadow-sm" 
+                                    title="Editar Rutina" 
+                                    onClick={() => abrirModalEditarTarea(tarea)}
+                                  >
+                                    ✏️
+                                  </button>
+
                                 </div>
-                              )}
-                              <button 
-                                className="btn btn-outline-warning btn-sm shadow-sm ms-1" 
-                                title="Editar Rutina" 
-                                onClick={() => abrirModalEditarTarea(tarea)}
-                              >
-                                ✏️
-                              </button>
+                                {!completadaHoy && !tareaFutura && (tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && (
+                                  <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                    ⏱️ {Math.floor(minutosMostrados)} min dedicados
+                                    {tarea.estado === 'En Curso' && !tarea.en_pausa && (
+                                      <span className="ms-1 text-primary"> (corriendo...)</span>
+                                    )}
+                                  </div>
+                                )}
+
+                              </div>
                             </td>
                           </tr>
                         );
