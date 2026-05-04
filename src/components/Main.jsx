@@ -1163,7 +1163,7 @@ export default function Main({ cambiarVista, usuario }) {
                                   ) : (
                                     <>
                                       {/* Botón Iniciar */}
-                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa === 1) && (
+                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa == 1) && (
                                         <button 
                                           className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
                                           onClick={() => iniciarTarea(tarea.id)} 
@@ -1174,7 +1174,7 @@ export default function Main({ cambiarVista, usuario }) {
                                       )}
 
                                       {/* Botón Pausar */}
-                                      {(tarea.estado === 'En Curso' && tarea.en_pausa === 0) && (
+                                      {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
                                         <button 
                                           className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
                                           onClick={() => pausarTarea(tarea.id)} 
