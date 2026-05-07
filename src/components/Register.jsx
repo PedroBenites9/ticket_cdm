@@ -112,7 +112,7 @@ export default function Register({ cambiarVista }) {
             >
               <option value="" disabled>Seleccione su Área...</option>
               {areasDisponibles.map((area) => (
-                <option key={area.codigo} value={area.codigo}>
+                <option key={area.codigo} value={area.id}>
                   {area.nombre}
                 </option>
               ))}

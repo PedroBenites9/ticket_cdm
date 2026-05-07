@@ -35,7 +35,7 @@ export const DashboardAgustin = ({ tickets }) => {
 
     return (
         <div className="container-fluid mb-4 animate__animated animate__fadeIn">
-            <h3 className="text-secondary mb-4">📊 Dashboard General de Coordinación</h3>
+            <h3 className="text-secondary mb-4">📊 Dashboard General de Tickets</h3>
             
             <div className="row g-4">
                 

@@ -532,18 +532,24 @@ export default function Main({ cambiarVista, usuario }) {
 };
 
   // ==========================================
-  // LÓGICA DE PAGINACIÓN (Actualizada)
+  // LÓGICA DE PAGINACIÓN
   // ==========================================
   const indiceUltimoTicket = paginaActual * ticketsPorPagina;
   const indicePrimerTicket = indiceUltimoTicket - ticketsPorPagina;
   
-  // ¡IMPORTANTE! Cambiamos ticketsFiltrados por ticketsOrdenados acá:
-  const ticketsPaginados = ticketsOrdenados.slice(indicePrimerTicket, indiceUltimoTicket);
-  
-  // Calculamos cuántas páginas hay en total
-  const totalPaginas = Math.ceil(ticketsFiltrados.length / ticketsPorPagina);
+ // 1. Filtramos los tickets ordenados para que el Coordinador solo vea los suyos
+  const ticketsParaLaTabla = rolUsuario === 'coordinador'
+      ? ticketsOrdenados.filter(t => 
+        t.solicitante === usuario)
+      : ticketsOrdenados;
 
-  // Truco UX: Si el usuario busca algo y los resultados bajan, lo devolvemos a la página 1
+  // 2. Paginamos sobre la lista restringida
+  const ticketsPaginados = ticketsParaLaTabla.slice(indicePrimerTicket, indiceUltimoTicket);
+
+  // 3. Calculamos cuántas páginas hay en total basados en lo que realmente puede ver
+  const totalPaginas = Math.ceil(ticketsParaLaTabla.length / ticketsPorPagina);
+
+  // Si el usuario busca algo y los resultados bajan, lo devolvemos a la página 1
   useEffect(() => {
     setPaginaActual(1);
   }, [busqueda, filtroCategoria, filtroOrigen]);
@@ -709,7 +715,6 @@ export default function Main({ cambiarVista, usuario }) {
         {/* ====================================================  */}
         {pestañaActual === 'tickets' && (
           <div className="animate__animated animate__fadeIn">
-             {/* AQUÍ VA TODO TU CÓDIGO ACTUAL: El título "Mis Incidencias", los botones, los gráficos, los filtros y la tabla de tickets */}
             <div className="d-flex justify-content-between align-items-center mb-4">
           
           {rolUsuario === 'tecnico'&&(
@@ -796,7 +801,6 @@ export default function Main({ cambiarVista, usuario }) {
                   <ResponsiveContainer width="100%" height="100%">
                    <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                       
-                      {/* NUEVO: Agregamos allowDecimals={false} para forzar números enteros */}
                       <XAxis type="number" allowDecimals={false} />
                       
                       <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 11}} />
@@ -976,7 +980,7 @@ export default function Main({ cambiarVista, usuario }) {
                       </ul>
                   )}
               </div>
-               {/* 5. NUEVO: Ordenar Por */}
+               {/* 5. Ordenar Por */}
               <div className="col-md-3">
                 <div className="input-group shadow-sm">
                   <span className="input-group-text bg-dark text-white fw-bold" style={{fontSize: '0.85rem'}}>Ordenar por</span>
@@ -990,7 +994,6 @@ export default function Main({ cambiarVista, usuario }) {
               </div>
               {/* 6. Botón Histórico */}
               <div className="" style={{ position: 'relative', zIndex: menuAbierto === 'prioridad' ? 1050 : 1045 }}>
-               {/* 6. Botón Histórico */}
                 <button 
                     className="btn btn-outline-secondary fw-bold shadow-sm d-flex align-items-center"
                     type="button"
@@ -1452,6 +1455,8 @@ export default function Main({ cambiarVista, usuario }) {
         cambiarAreaUsuario={cambiarAreaUsuario}
         areasDisponibles={areasDisponibles}
         listaRoles={listaRoles}
+        cerrarModal={() => setMostrarModalUsuarios(false)}
+        URL_API={URL_API}
       />
       <ModalTarea 
         mostrarModalTarea={mostrarModalTarea} setMostrarModalTarea={setMostrarModalTarea}
