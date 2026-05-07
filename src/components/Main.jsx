@@ -23,6 +23,10 @@ import ModalTicket from './ModalTicket';
 import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
+import { ModalHistorico } from './ModalHistorico'; 
+
+//Dashboard Agustin
+import { DashboardAgustin } from './ComponenteAgustin';
 
 const socket = io(import.meta.env.VITE_URL_BACKEND || '/');
 
@@ -89,6 +93,16 @@ export default function Main({ cambiarVista, usuario }) {
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
   const [ordenTickets, setOrdenTickets] = useState('desc');
+  const [verHistorico, setVerHistorico] = useState(false);
+  const [filtros, setFiltros] = useState({
+      estados: [],     
+      origenes: [],
+      categorias: [],
+      prioridades: []
+  });
+  const [mostrarModalHistorico, setMostrarModalHistorico] = useState(false);
+  // Si es null, están todos cerrados. Si dice 'origen', se abre el de origen.
+  const [menuAbierto, setMenuAbierto] = useState(null);
 
   // Paginación de Tickets
   const [paginaActual, setPaginaActual] = useState(1);
@@ -99,6 +113,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
   const [areasDisponibles, setAreasDisponibles] = useState([]);
   const [areaUsuario, setAreaUsuario] = useState(localStorage.getItem('area_usuario') || '');
+  const [listaRoles, setListaRoles] = useState([]);
 
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
@@ -171,6 +186,20 @@ export default function Main({ cambiarVista, usuario }) {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
+  useEffect(() => {
+    const traerRoles = async () => {
+        try {
+            const response = await fetch(`${URL_API}/usuarios/roles`);
+            const data = await response.json();
+            setListaRoles(data); // ¡Acá se llena el tanque!
+            
+        } catch (error) {
+            console.error("Error al traer los roles:", error);
+        }
+    };
+
+    traerRoles();
+}, []);
   // ==========================================
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
@@ -190,11 +219,11 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
   // ==========================================
-  useEffect(() => {
-    // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto)
-    const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
-    return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
-}, []);
+      useEffect(() => {
+        // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto)
+        const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
+        return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
+    }, []);
 
   useEffect(() => {
     // 1. Carga inicial tradicional (una sola vez)
@@ -426,13 +455,27 @@ export default function Main({ cambiarVista, usuario }) {
     const areaSafe = ticket.area_origen || '';
     const solicitanteSafe = ticket.solicitante || '';
 
-    // 2. Filtros de la barra superior
+    // 2. Filtros de la barra superior (Múltiple Selección)
     const matchBusqueda = !busqueda || asuntoSafe.toLowerCase().includes(busqueda.toLowerCase()) || codigoSafe.toLowerCase().includes(busqueda.toLowerCase());
-    const matchOrigen = filtroOrigen === 'Todos' || ticket.tipo_origen === filtroOrigen;
-    
-    // (Permitimos que pase si la categoría está vacía, como en tu ticket de prueba)
-    const matchCategoria = filtroCategoria === 'Todas' || ticket.categoria === filtroCategoria || ticket.categoria === ''; 
-    const matchPrioridad = filtroPrioridad === 'Todas' || ticket.prioridad === filtroPrioridad;
+
+    // 💡 Función salvavidas: Convierte todo a minúsculas y le corta los espacios extra
+    const limpiarTexto = (texto) => (texto || '').toString().toLowerCase().trim();
+
+    // 2. Filtros de la barra superior (Multiselect a prueba de balas)
+    const matchOrigen = !filtros.origenes?.length || 
+        filtros.origenes.some(filtro => limpiarTexto(ticket.tipo_origen || ticket.origen) === limpiarTexto(filtro));
+
+    const matchCategoria = !filtros.categorias?.length || 
+        filtros.categorias.some(filtro => limpiarTexto(ticket.categoria) === limpiarTexto(filtro));
+
+    const matchPrioridad = !filtros.prioridades?.length || 
+        filtros.prioridades.some(filtro => limpiarTexto(ticket.prioridad) === limpiarTexto(filtro));
+
+    const matchEstado = !filtros.estados?.length || 
+        filtros.estados.some(filtro => limpiarTexto(ticket.estado) === limpiarTexto(filtro));
+
+    // REGLA DE ORO: En la tabla principal NUNCA mostramos los Cerrados Definitivos
+    const matchNoEsHistorico = ticket.estado !== 'Cerrado Definitivo';
 
     // 3. Filtro de Privacidad (Capa 2) ¡Inmune a mayúsculas y espacios extras!
     const miRol = (rolUsuario || localStorage.getItem('rol_usuario') || '').toLowerCase().trim();
@@ -446,7 +489,7 @@ export default function Main({ cambiarVista, usuario }) {
     const matchPrivacidad = esAdminOTecnico || esDeMiArea || loCreeYo;
 
     // Solo se muestra en la tabla si pasa todas las pruebas
-    return matchBusqueda && matchOrigen && matchCategoria && matchPrioridad && matchPrivacidad;
+    return matchBusqueda && matchNoEsHistorico && matchOrigen && matchCategoria && matchPrioridad && matchEstado && matchPrivacidad;
   });
 
  // ==========================================
@@ -471,6 +514,22 @@ export default function Main({ cambiarVista, usuario }) {
     }
     return 0;
   });
+
+  // ==========================================
+  // LÓGICA DE MANEJO DE CHECKBOX PARA FILTROS MULTPLES
+  // ==========================================
+  const toggleFiltro = (tipo, valor) => {
+    setFiltros(prev => {
+        const seleccionado = prev[tipo].includes(valor);
+        return {
+            ...prev,
+            // Si ya estaba, lo saca. Si no estaba, lo agrega al array.
+            [tipo]: seleccionado 
+                ? prev[tipo].filter(item => item !== valor) 
+                : [...prev[tipo], valor]
+        };
+    });
+};
 
   // ==========================================
   // LÓGICA DE PAGINACIÓN (Actualizada)
@@ -569,7 +628,6 @@ export default function Main({ cambiarVista, usuario }) {
     return coincideBusqueda && coincideCategoria;
   });
   
-
   // ==========================================
   // 10. RENDERIZADO DEL COMPONENTE (UI)
   // ==========================================
@@ -642,10 +700,9 @@ export default function Main({ cambiarVista, usuario }) {
                     {indicadores.cantidadNuevas}
                   </span>
                 )}
-              </button>
+              </button>      
             </li>
           )}
-    
         </ul>
         {/* ====================================================  */}
         {/* VISTA 1: TICKETS                                      */}
@@ -712,7 +769,7 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         )}
 
-        {(rolUsuario === 'admin' || areaUsuario == 'CoordinadorGral') && (
+        {(rolUsuario === 'admin' ) && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
@@ -734,7 +791,7 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
-                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría IT</h6>
+                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría</h6>
                 <div style={{ height: '250px' }}>
                   <ResponsiveContainer width="100%" height="100%">
                    <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -749,75 +806,202 @@ export default function Main({ cambiarVista, usuario }) {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
+            </div>            
           </div>
+        )}
+
+        {(rolUsuario?.toLowerCase() === 'admin' || areaUsuario?.toLowerCase() === 'coordinador gral.') && (
+              <DashboardAgustin tickets={tickets}/>
         )}
 
         {/* 10. Filtros Globales (Disponibles para todos los usuarios) */}
         <div className="row mb-3 gx-2">
-            
-          {/* 1. Buscador */}
-          <div className="col-md-3 mb-2 mb-md-0">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-white border-end-0">🔍</span>
-              <input type="text" className="form-control border-start-0" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-            </div>
-          </div>
+         
+          {/* align-items-stretch hace que todos compartan exactamente el mismo alto */}
+          <div className="d-flex flex-wrap align-items-center  gap-2 mb-3">        
+    
+                {/* 1. Buscador (Queda igual, es perfecto) */}
+                <div className="input-group shadow-sm" style={{ width: '250px' }}>
+                    <span className="input-group-text bg-white border-end-0">🔍</span>
+                    <input type="text" className="form-control border-start-0" placeholder="Buscar ticket..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+                </div>
+                {/* EL ESCUDO INVISIBLE: Solo aparece si hay un menú abierto y cubre toda la pantalla por detrás del menú */}
+                {menuAbierto && (
+                    <div 
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1040 }} 
+                        onClick={() => setMenuAbierto(null)}
+                    />
+                )}
+                {/* ========================================= */}
+                {/* 2. Filtro de ORIGEN */}
+                {/* ========================================= */}
+                <div className="dropdown" style={{ position: 'relative', zIndex: menuAbierto === 'origen' ? 1050 : 1045 }}>
+                    <button 
+                        className="btn btn-outline-secondary bg-white text-dark d-flex align-items-center gap-2" 
+                        type="button" 
+                        // Si ya está abierto y le hago clic, lo cierro (null). Si no, abro 'origen'.
+                        onClick={() => setMenuAbierto(menuAbierto === 'origen' ? null : 'origen')}
+                    >
+                        <span className="fw-bold text-secondary small">Origen</span>
+                        {filtros.origenes?.length > 0 && <span className="badge bg-primary">{filtros.origenes.length}</span>}
+                        <span style={{ fontSize: '0.8em' }}>▼</span>
+                    </button>
+                    
+                    {/* Cambiamos la condición para mostrar el menú */}
+                    {menuAbierto === 'origen' && (
+                        <ul className="dropdown-menu show p-2 shadow" style={{ display: 'block', position: 'absolute', minWidth: '180px' }}>
+                            {[
+                                { id: 'Interno', label: '🏢 Interno' },
+                                { id: 'Externo', label: '🤝 Externo' }
+                            ].map(opcion => (
+                                <li key={opcion.id}>
+                                    <label className="dropdown-item d-flex align-items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                        <input 
+                                            type="checkbox" className="form-check-input m-0"
+                                            checked={filtros.origenes.includes(opcion.id)}
+                                            onChange={() => toggleFiltro('origenes', opcion.id)}
+                                        />
+                                        {opcion.label}
+                                    </label>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
 
-          {/* 2. Filtro de Origen */}
-          <div className="col-md-2 mb-2 mb-md-0">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Origen</span>
-              <select className="form-select" value={filtroOrigen} onChange={(e) => setFiltroOrigen(e.target.value)}>
-                <option value="Todos">Todos</option>
-                <option value="Interno">🏢 Internos</option>
-                <option value="Externo">🤝 Externos</option>
-              </select>
-            </div>
-          </div>
+                {/* ========================================= */}
+                {/* 3. Filtro de CATEGORÍA (Dropdown Multiselect) */}
+                {/* ========================================= */}
+                <div className="dropdown" style={{ position: 'relative', zIndex: menuAbierto === 'categoria' ? 1050 : 1045 }}>
+                    <button 
+                        className="btn btn-outline-secondary bg-white text-dark d-flex align-items-center gap-2" 
+                        type="button" 
+                        onClick={() => setMenuAbierto(menuAbierto === 'categoria' ? null : 'categoria')}
+                    >
+                        <span className="fw-bold text-secondary small">Categoría</span>
+                        {filtros.categorias.length > 0 && <span className="badge bg-primary">{filtros.categorias.length}</span>}
+                        <span style={{ fontSize: '0.8em' }}>▼</span>
+                    </button>
+                    
+                    {menuAbierto === 'categoria' && (
+                        <ul className="dropdown-menu show p-2 shadow" style={{ display: 'block', position: 'absolute', zIndex: 1050, minWidth: '220px' }}>
+                            {[
+                                { id: 'Redes e Internet', label: '🌐 Redes e Internet' },
+                                { id: 'Active Directory / Accesos', label: '🔑 Active Directory / Accesos' },
+                                { id: 'Hardware e Insumos', label: '💻 Hardware e Insumos' },
+                                { id: 'Software y SO', label: '💽 Software y SO' },
+                                { id: 'CCTV', label: '📹 CCTV' },
+                                { id: 'Reportes', label: '📄 Reportes' },
+                                { id: 'Mantenimiento', label: '🔧 Mantenimiento' },
+                                { id: 'Porgramas/Aplicaciones', label: '🗄️ Porgramas/Aplicaciones' },
+                            ].map(opcion => (
+                                <li key={opcion.id}>
+                                    <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()}>
+                                        <input 
+                                            type="checkbox" className="form-check-input m-0"
+                                            checked={filtros.categorias.includes(opcion.id)}
+                                            onChange={() => toggleFiltro('categorias', opcion.id)}
+                                        />
+                                        {opcion.label}
+                                    </label>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
 
-          {/* 3. Filtro de Categoría */}
-          <div className="col-md-2 mb-2 mb-md-0">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Categoría</span>
-              <select className="form-select" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
-                <option value="Todas">Todas</option>
-                <option value="Redes e Internet">🌐 Redes</option>
-                <option value="Active Directory / Accesos">🔑 Accesos</option>
-                <option value="Hardware e Insumos">💻 Hardware</option>
-                <option value="Software y SO">💽 Software</option>
-                <option value="CCTV">📹 CCTV</option>
-              </select>
-            </div>
-          </div>
+                {/* ========================================= */}
+                {/* 4. Filtro de PRIORIDAD (Dropdown Multiselect) */}
+                {/* ========================================= */}
+              <div className="dropdown" style={{ position: 'relative', zIndex: menuAbierto === 'prioridad' ? 1050 : 1045 }}>
+                  <button 
+                      className="btn btn-outline-secondary bg-white text-dark d-flex align-items-center gap-2" 
+                      type="button" 
+                      onClick={() => setMenuAbierto(menuAbierto === 'prioridad' ? null : 'prioridad')}
+                  >
+                      <span className="fw-bold text-secondary small">Prioridad</span>
+                      {filtros.prioridades.length > 0 && <span className="badge bg-primary">{filtros.prioridades.length}</span>}
+                      <span style={{ fontSize: '0.8em' }}>▼</span>
+                  </button>
+                  
+                  {menuAbierto === 'prioridad' && (
+                      <ul className="dropdown-menu show p-2 shadow" style={{ display: 'block', position: 'absolute', zIndex: 1050, minWidth: '150px' }}>
+                          {[
+                              { id: 'Baja', label: '🟢 Baja' },
+                              { id: 'Media', label: '🟡 Media' },
+                              { id: 'Alta', label: '🟠 Alta' },
+                              { id: 'Urgente', label: '🔴 Urgente' }
+                          ].map(opcion => (
+                              <li key={opcion.id}>
+                                  <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()}>
+                                      <input 
+                                          type="checkbox" className="form-check-input m-0"
+                                          checked={filtros.prioridades.includes(opcion.id)}
+                                          onChange={() => toggleFiltro('prioridades', opcion.id)}
+                                      />
+                                      {opcion.label}
+                                  </label>
+                              </li>
+                          ))}
+                      </ul>
+                  )}
+              </div>
 
-          {/* 4. Filtro de Prioridad */}
-          <div className="col-md-2 mb-2 mb-md-0">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-light fw-bold text-secondary" style={{fontSize: '0.85rem'}}>Prioridad</span>
-              <select className="form-select" value={filtroPrioridad} onChange={(e) => setFiltroPrioridad(e.target.value)}>
-                <option value="Todas">Todas</option>
-                <option value="Baja">🟢 Baja</option>
-                <option value="Media">🟡 Media</option>
-                <option value="Alta">🟠 Alta</option>
-                <option value="Urgente">🔴 Urgente</option>
-              </select>
+              <div className="dropdown" style={{ position: 'relative', zIndex: menuAbierto === 'prioridad' ? 1050 : 1045 }}>
+                  <button 
+                      className="btn btn-outline-secondary bg-white text-dark d-flex align-items-center gap-2" 
+                      type="button" 
+                      onClick={() => setMenuAbierto(menuAbierto === 'estado' ? null : 'estado')}
+                  >
+                      <span className="fw-bold text-secondary small">Estado</span>
+                      {filtros.prioridades.length > 0 && <span className="badge bg-primary">{filtros.prioridades.length}</span>}
+                      <span style={{ fontSize: '0.8em' }}>▼</span>
+                  </button>
+                  
+                  {menuAbierto === 'estado' && (
+                      <ul className="dropdown-menu show p-2 shadow" style={{ display: 'block', position: 'absolute', zIndex: 1050, minWidth: '200px' }}>
+                          {['Abierto', 'En Proceso', 'Resuelto'].map(estado => (
+                              <li key={estado}>
+                                  <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()}>
+                                      <input 
+                                          type="checkbox" 
+                                          className="form-check-input m-0"
+                                          checked={filtros.estados.includes(estado)}
+                                          onChange={() => toggleFiltro('estados', estado)}
+                                      />
+                                      {estado}
+                                  </label>
+                              </li>
+                          ))}
+                      </ul>
+                  )}
+              </div>
+               {/* 5. NUEVO: Ordenar Por */}
+              <div className="col-md-3">
+                <div className="input-group shadow-sm">
+                  <span className="input-group-text bg-dark text-white fw-bold" style={{fontSize: '0.85rem'}}>Ordenar por</span>
+                  <select className="form-select border-dark" value={ordenTickets} onChange={(e) => setOrdenTickets(e.target.value)}>
+                    <option value="fecha_desc">🕒 Más Recientes</option>
+                    <option value="fecha_asc">⏳ Más Antiguos</option>
+                    <option value="prioridad">🚨 Prioridad (Urgentes primero)</option>
+                    <option value="estado">📊 Estado (Abiertos primero)</option>
+                  </select>
+                </div>
+              </div>
+              {/* 6. Botón Histórico */}
+              <div className="" style={{ position: 'relative', zIndex: menuAbierto === 'prioridad' ? 1050 : 1045 }}>
+               {/* 6. Botón Histórico */}
+                <button 
+                    className="btn btn-outline-secondary fw-bold shadow-sm d-flex align-items-center"
+                    type="button"
+                    onClick={() => setMostrarModalHistorico(true)}
+                >
+                    🗄️ Histórico de Tickets
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* 5. NUEVO: Ordenar Por */}
-          <div className="col-md-3">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-dark text-white fw-bold" style={{fontSize: '0.85rem'}}>Ordenar por</span>
-              <select className="form-select border-dark" value={ordenTickets} onChange={(e) => setOrdenTickets(e.target.value)}>
-                <option value="fecha_desc">🕒 Más Recientes</option>
-                <option value="fecha_asc">⏳ Más Antiguos</option>
-                <option value="prioridad">🚨 Prioridad (Urgentes primero)</option>
-                <option value="estado">📊 Estado (Abiertos primero)</option>
-              </select>
-            </div>
-          </div>
         </div>
+        
         
         <div className="card shadow-sm" ref={tablaTicketsRef}>
           {/* <div className="card-body p-0 table-responsive" style={{ minHeight: '650px' }}> */}
@@ -1076,7 +1260,6 @@ export default function Main({ cambiarVista, usuario }) {
                         const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
                         const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
 
-                        // 👇 AGREGAMOS ESTA MATEMÁTICA ACÁ 👇
                         let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
                         
                         // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
@@ -1090,7 +1273,6 @@ export default function Main({ cambiarVista, usuario }) {
                                 minutosMostrados += minutosExtra;
                             }
                         }
-                        // console.log(completadaHoy);
                         return (
                           <tr 
                             key={tarea.id} 
@@ -1114,12 +1296,10 @@ export default function Main({ cambiarVista, usuario }) {
                             <td>
                               <div className="d-flex flex-column align-items-center gap-1">
                                 {completadaHoy ? (
-                                  /* Si ya está lista, mostramos la próxima ejecución amigablemente */
                                   <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
                                     Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                                   </span>
                                 ) : (
-                                  /* Si NO está lista, mostramos el tiempo Y el estado visual inteligente */
                                   <>
                                     {/* 1. Mostramos la cuenta regresiva o la hora programada original */}
                                     <small className="text-muted fw-bold d-block mb-1">
@@ -1139,92 +1319,97 @@ export default function Main({ cambiarVista, usuario }) {
                               </div>
                             </td>
                             {/* 5. Acciones y Botones del Cronómetro */}
-                            <td className="d-flex justify-content-center align-items-center gap-2">
-                              
-                              {completadaHoy ? (
-                                <div className="d-flex justify-content-center align-items-center gap-2">
-                                  <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
-                                    ✔️ Lista por hoy
-                                  </span>
-                                  {/* Botón Eliminar cuando ya está completada */}
-                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                    🗑️
-                                  </button>
-                                </div>
-                              ) : tareaFutura ? (
-                                <div className="d-flex justify-content-center align-items-center gap-2">
-                                  <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
-                                    ⏳ Esperando fecha
-                                  </span>
-                                  <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>🗑️</button>
-                                </div>
-                              ):(
-                                <div className="d-flex justify-content-center flex-column align-items-center gap-2">
-                                  <div className="d-flex gap-2 align-items-center">
-                                     {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa === 1) ? (
-                                      <button 
-                                        className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
-                                        onClick={() => iniciarTarea(tarea.id)} 
-                                        title="Iniciar o Reanudar tarea"
-                                      >
-                                        ▶ Iniciar
-                                      </button>
-                                    ) : null}
+                            <td className="align-middle">
+                              {/* Contenedor principal: Columna vertical centrada */}
+                              <div className="d-flex flex-column align-items-center gap-1">
 
-                                    {/* Si está En Curso: Botón de PAUSAR */}
-                                    {(tarea.estado === 'En Curso' && tarea.en_pausa === 0) ? (
-                                      <button 
-                                        className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
-                                        onClick={() => pausarTarea(tarea.id)} 
-                                        title="Pausar por una emergencia"
-                                      >
-                                        ⏸ Pausar
-                                      </button>
-                                    ) : null}
-
-                                    {/* Botón FINALIZAR (Ahora abre un modal para pedir comentario) */}
-                                    <button 
-                                      className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
-                                      onClick={() => {
-                                        setTareaSeleccionadaFinalizar(tarea);
-                                        setMostrarModalFinalizar(true);
-                                      }}
-                                      title="Finalizar tarea"
-                                    >
-                                      ✅ Finalizar
-                                    </button>
-                                    
-                                    {/* BOTÓN DE ELIMINAR */}
-                                    <button 
-                                      className="btn btn-outline-danger btn-sm shadow-sm ms-1" 
-                                      title="Eliminar Rutina" 
-                                      onClick={() => eliminarTarea(tarea.id)}
-                                    >
-                                      🗑️
-                                    </button>
-                                    
-                                  </div>
+                                <div className="d-flex align-items-center justify-content-center gap-2">
                                   
-                               {/* Mostramos los minutos acumulados y el cronómetro en vivo */}
-                                    {(tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && !completadaHoy && (
-                                        <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            ⏱️ {Math.floor(minutosMostrados)} min dedicados
-                                            
-                                            {/* Indicador visual de que está corriendo */}
-                                            {tarea.estado === 'En Curso' && !tarea.en_pausa && (
-                                                <span className="ms-1 text-primary"> (corriendo...)</span>
-                                            )}
-                                        </div>
-                                    )}
+                                  {completadaHoy ? (
+                                    <>
+                                      <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
+                                        ✔️ Lista por hoy
+                                      </span>
+                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
+                                        🗑️
+                                      </button>
+                                    </>
+                                  ) : tareaFutura ? (
+                                    <>
+                                      <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
+                                        ⏳ Esperando fecha
+                                      </span>
+                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
+                                        🗑️
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Botón Iniciar */}
+                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa == 1) && (
+                                        <button 
+                                          className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
+                                          onClick={() => iniciarTarea(tarea.id)} 
+                                          title="Iniciar o Reanudar tarea"
+                                        >
+                                          ▶ Iniciar
+                                        </button>
+                                      )}
+
+                                      {/* Botón Pausar */}
+                                      {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
+                                        <button 
+                                          className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
+                                          onClick={() => pausarTarea(tarea.id)} 
+                                          title="Pausar por una emergencia"
+                                        >
+                                          ⏸ Pausar
+                                        </button>
+                                      )}
+
+                                      {/* Botón Finalizar */}
+                                      <button 
+                                        className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
+                                        onClick={() => {
+                                          setTareaSeleccionadaFinalizar(tarea);
+                                          setMostrarModalFinalizar(true);
+                                        }}
+                                        title="Finalizar tarea"
+                                      >
+                                        ✅ Finalizar
+                                      </button>
+                                      
+                                      {/* Botón Eliminar */}
+                                      <button 
+                                        className="btn btn-outline-danger btn-sm shadow-sm" 
+                                        title="Eliminar Rutina" 
+                                        onClick={() => eliminarTarea(tarea.id)}
+                                      >
+                                        🗑️
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {/* Botón Editar (Siempre visible y alineado al final) */}
+                                  <button 
+                                    className="btn btn-outline-warning btn-sm shadow-sm" 
+                                    title="Editar Rutina" 
+                                    onClick={() => abrirModalEditarTarea(tarea)}
+                                  >
+                                    ✏️
+                                  </button>
+
                                 </div>
-                              )}
-                              <button 
-                                className="btn btn-outline-warning btn-sm shadow-sm ms-1" 
-                                title="Editar Rutina" 
-                                onClick={() => abrirModalEditarTarea(tarea)}
-                              >
-                                ✏️
-                              </button>
+                                {!completadaHoy && !tareaFutura && (tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && (
+                                  <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                    ⏱️ {Math.floor(minutosMostrados)} min dedicados
+                                    {tarea.estado === 'En Curso' && !tarea.en_pausa && (
+                                      <span className="ms-1 text-primary"> (corriendo...)</span>
+                                    )}
+                                  </div>
+                                )}
+
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1239,6 +1424,13 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         )}
       {VistaCarga}
+      {/* Renderizamos el Modal solo si el estado es true */}
+      {mostrarModalHistorico && (
+          <ModalHistorico 
+              tickets={tickets} // Le pasás tu lista completa de tickets cruda
+              cerrarModal={() => setMostrarModalHistorico(false)} 
+          />
+      )}
       </main>
 
       {/* BLOQUE DE MODALES EXTERNOS */}
@@ -1258,7 +1450,8 @@ export default function Main({ cambiarVista, usuario }) {
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}
         rolUsuario={rolUsuario} usuariosLista={usuariosLista} cambiarRolUsuario={cambiarRolUsuario}
         cambiarAreaUsuario={cambiarAreaUsuario}
-    areasDisponibles={areasDisponibles}
+        areasDisponibles={areasDisponibles}
+        listaRoles={listaRoles}
       />
       <ModalTarea 
         mostrarModalTarea={mostrarModalTarea} setMostrarModalTarea={setMostrarModalTarea}

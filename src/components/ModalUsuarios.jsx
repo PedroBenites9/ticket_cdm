@@ -3,7 +3,7 @@ import React from 'react';
 const ModalUsuarios = ({
   mostrarModalUsuarios, setMostrarModalUsuarios,
   rolUsuario, usuariosLista, cambiarRolUsuario,
-  cambiarAreaUsuario, areasDisponibles
+  cambiarAreaUsuario, areasDisponibles,listaRoles
 }) => {
   if (!mostrarModalUsuarios || rolUsuario !== 'admin') return null;
 
@@ -32,7 +32,10 @@ const ModalUsuarios = ({
                   <tr key={u.id}>
                     <td className="fw-bold">{u.nombre}</td>
                     <td className="text-muted"><u>{u.email}</u></td>
-                    <td><span className="badge bg-info text-dark">{u.area || 'Sin Área'}</span></td>
+                    <td>
+                      <span className="badge bg-info text-dark">
+                          {u.nombre_area || 'Sin Área'}
+                      </span></td>
                     <td>
                       <select 
                         className="form-select form-select-sm mx-auto" 
@@ -48,20 +51,27 @@ const ModalUsuarios = ({
                     </td>
 
                     <td>
-                      <span className={`badge ${u.rol === 'admin' ? 'bg-danger' : u.rol === 'tecnico' ? 'bg-primary' : 'bg-secondary'}`}>
-                        {u.rol ? u.rol.toUpperCase() : ''}
+                      <span className={`badge ${u.nombre_rol === 'Administrador' ? 'bg-danger' : 'bg-secondary'}`}>
+                          {u.nombre_rol ? u.nombre_rol.toUpperCase() : 'SIN ROL'}
                       </span>
                     </td>
                     <td>
                       <select 
-                        className="form-select form-select-sm mx-auto" 
-                        style={{ width: '140px' }} 
-                        value={u.rol} 
-                        onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}
+                          className="form-select form-select-sm shadow-sm cursor-pointer" 
+                          value={u.rol?.toLowerCase()} 
+                          onChange={(e) => cambiarRolUsuario(u.id, e.target.value)}
+                          style={{ minWidth: '130px' }}
                       >
-                        <option value="final">Usuario Final</option>
-                        <option value="tecnico">Técnico</option>
-                        <option value="admin">Administrador</option>
+                          <option value="" disabled>Seleccionar rol...</option>
+                          {/* Iteramos sobre listaRoles, NO sobre usuariosLista */}
+                          {listaRoles.map((rolDb) => (
+                              <option 
+                                  key={rolDb.id} 
+                                  value={rolDb.codigo} 
+                              >
+                                  {rolDb.nombre} 
+                              </option>
+                          ))}
                       </select>
                     </td>
                   </tr>

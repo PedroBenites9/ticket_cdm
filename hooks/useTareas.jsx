@@ -104,23 +104,35 @@ const manejarDias = (dia) => {
     }
   };
 
-  const iniciarTarea = async (id) => {
+const iniciarTarea = async (id) => {
     try {
-      await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
-      toast.success("▶️ Cronómetro iniciado. ¡A trabajar!");
+        // 1. Guardamos la respuesta del backend en una variable
+        const respuesta = await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
+        
+        // 2. Le preguntamos a fetch si el status HTTP fue exitoso (ej: 200)
+        if (!respuesta.ok) {
+            // Si el backend falló, forzamos a que salte al 'catch' de abajo
+            throw new Error("El servidor no pudo actualizar la tarea");
+        }
 
-      try {
-        const resTareas = await fetch(`${URL_API}/tareas`);
-        const tareasActualizadas = await resTareas.json();
-        setTareas(tareasActualizadas);
-      } catch (err) {
-        console.error("Error al refrescar la tabla de rutinas:", err);
-      }
+        // 3. Si llegó hasta acá, es porque en la base de datos SÍ se guardó
+        toast.success("▶ Cronómetro iniciado. ¡A trabajar!");
+
+        // 4. Refrescamos la tabla
+        try {
+            const resTareas = await fetch(`${URL_API}/tareas`);
+            const tareasActualizadas = await resTareas.json();
+            setTareas(tareasActualizadas);
+        } catch (err) {
+            console.error("Error al refrescar la tabla de rutinas:", err);
+        }
 
     } catch (error) {
-      toast.error("Error al iniciar la tarea.");
+        // Ahora sí, si falla la DB, va a caer acá y mostrar el cartel rojo
+        console.error("Error en iniciarTarea:", error);
+        toast.error("Error al iniciar la tarea. Revisá la consola del Backend.");
     }
-  };
+};
 
 // NUEVO: Función para saber si la tarea está programada para mañana o más adelante
   const esTareaFutura = (fechaString) => {
@@ -152,6 +164,7 @@ const manejarDias = (dia) => {
       toast.error("Error al pausar la tarea.");
     }
   };
+
   const eliminarTarea = async (idTabla) => {
     const confirmar = window.confirm("¿Estás seguro de eliminar esta rutina definitivamente? Se borrará todo su historial.");
     if (confirmar) {
@@ -300,7 +313,6 @@ const manejarDias = (dia) => {
         ...tarea,
         dias_especificos: diasLimpios 
     });
-    console.log(formularioTarea);
     // 3. Recién ahora abrimos el modal
     setMostrarModalTarea(true); // O la variable que uses para abrirlo
 };
