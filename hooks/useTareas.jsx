@@ -42,10 +42,10 @@ const manejarDias = (dia) => {
     });
 };
 
-  const guardarTarea = async (e) => {
+ const guardarTarea = async (e) => {
     e.preventDefault();
     mostrarCarga();
-    try {
+    try { 
       const esEdicion = formularioTarea.id; // ¿Tiene ID? Entonces es edición
       const url = esEdicion ? `${URL_API}/tareas/${formularioTarea.id}` : `${URL_API}/tareas`;
       const metodo = esEdicion ? 'PUT' : 'POST';
@@ -61,13 +61,21 @@ const manejarDias = (dia) => {
         setMostrarModalTarea(false);
         // Limpiamos el formulario (incluyendo el ID a null)
         setFormularioTarea({ id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: '' });
+        try {
+          const resTareas = await fetch(`${URL_API}/tareas`);
+          const tareasActualizadas = await resTareas.json();
+          setTareas(tareasActualizadas);
+        } catch (err) {
+          console.error("Error al refrescar la tabla de rutinas:", err);
+        }
       } else {
         toast.error("Error al guardar la tarea.");
       }
-    } catch (error) {
-      toast.error("Error de conexión al servidor.");
+    } catch (error) { 
+      console.error("Error de red al guardar la tarea:", error);
+      toast.error("Ocurrió un error de conexión.");
     } finally {
-      ocultarCarga();
+      ocultarCarga(); 
     }
   };
 
@@ -96,14 +104,35 @@ const manejarDias = (dia) => {
     }
   };
 
-  const iniciarTarea = async (id) => {
+const iniciarTarea = async (id) => {
     try {
-      await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
-      toast.success("▶ Cronómetro iniciado. ¡A trabajar!");
+        // 1. Guardamos la respuesta del backend en una variable
+        const respuesta = await fetch(`${URL_API}/tareas/${id}/iniciar`, { method: 'PUT' });
+        
+        // 2. Le preguntamos a fetch si el status HTTP fue exitoso (ej: 200)
+        if (!respuesta.ok) {
+            // Si el backend falló, forzamos a que salte al 'catch' de abajo
+            throw new Error("El servidor no pudo actualizar la tarea");
+        }
+
+        // 3. Si llegó hasta acá, es porque en la base de datos SÍ se guardó
+        toast.success("▶ Cronómetro iniciado. ¡A trabajar!");
+
+        // 4. Refrescamos la tabla
+        try {
+            const resTareas = await fetch(`${URL_API}/tareas`);
+            const tareasActualizadas = await resTareas.json();
+            setTareas(tareasActualizadas);
+        } catch (err) {
+            console.error("Error al refrescar la tabla de rutinas:", err);
+        }
+
     } catch (error) {
-      toast.error("Error al iniciar la tarea.");
+        // Ahora sí, si falla la DB, va a caer acá y mostrar el cartel rojo
+        console.error("Error en iniciarTarea:", error);
+        toast.error("Error al iniciar la tarea. Revisá la consola del Backend.");
     }
-  };
+};
 
 // NUEVO: Función para saber si la tarea está programada para mañana o más adelante
   const esTareaFutura = (fechaString) => {
@@ -124,6 +153,13 @@ const manejarDias = (dia) => {
     try {
       await fetch(`${URL_API}/tareas/${id}/pausar`, { method: 'PUT' });
       toast.warning("⏸ Tarea pausada. El tiempo se ha guardado.");
+      try {
+        const resTareas = await fetch(`${URL_API}/tareas`);
+        const tareasActualizadas = await resTareas.json();
+        setTareas(tareasActualizadas);
+      } catch (err) {
+        console.error("Error al refrescar la tabla de rutinas:", err);
+      }
     } catch (error) {
       toast.error("Error al pausar la tarea.");
     }
@@ -277,7 +313,6 @@ const manejarDias = (dia) => {
         ...tarea,
         dias_especificos: diasLimpios 
     });
-    console.log(formularioTarea);
     // 3. Recién ahora abrimos el modal
     setMostrarModalTarea(true); // O la variable que uses para abrirlo
 };

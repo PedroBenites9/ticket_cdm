@@ -41,7 +41,7 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
 
       if (respuesta.ok) {
         // === GUARDADO DE SESIÓN VIP ===
-        localStorage.setItem('token_acceso', datos.token); // Por si tu backend envía token JWT
+        localStorage.setItem('token_acceso', datos.token); 
         localStorage.setItem('nombre_usuario', datos.usuario.nombre);
         localStorage.setItem('rol_usuario', datos.usuario.rol); 
         localStorage.setItem('area_usuario', datos.usuario.area); 

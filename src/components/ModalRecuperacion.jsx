@@ -16,7 +16,6 @@ const ModalRecuperacion = ({ mostrar, setMostrar, URL_API }) => {
     setCargando(true);
     setMensajeExtra('');
     try {
-      // Usamos tu nueva ruta de auth.js
       const res = await fetch(`${URL_API}/auth/solicitar-recuperacion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
