@@ -30,9 +30,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
       cargarComentarios(editandoId);
     }
   }, [editandoId]); 
-  useEffect(() => {
-      cargarTickets();
-    }, []);
+ 
 
   // FUNCIONES DE APOYO
   const obtenerColorEstado = (estado) => {
@@ -58,7 +56,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     return `${horas}h restantes`;
   };
 
-  // FUNCIONES PRINCIPALES (CRUD)
+  // FUNCIONES PRINCIPALES (CRUD)\
   const manejarCambio = (e) => setFormulario({ ...formulario, [e.target.name]: e.target.value });
 
   const abrirModalCrear = () => {
@@ -107,33 +105,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
     }
   };
 
-  const cargarTickets = async () => {
-    // 1. Forzamos la lectura fresca del storage
-    const rol = localStorage.getItem('rol_usuario');
-    const area = localStorage.getItem('area_usuario');
-    const nombre = localStorage.getItem('nombre_usuario');
-
-    // 2. Si no hay datos, no pedimos nada (evitamos el error del backend)
-    if (!rol || !area) {
-      console.log("⏳ Esperando datos de sesión...");
-      return;
-    }
-
-    try {
-      // 3. Agregamos un timestamp al final para evitar el cache del navegador
-      const url = `${URL_API}/tickets?rol=${rol}&area=${area}&nombre_usuario=${nombre}&t=${Date.now()}`;
-      
-      const respuesta = await fetch(url);
-      if (!respuesta.ok) throw new Error("Error en fetch");
-      
-      const datos = await respuesta.json();
-      setTickets(datos);
-      setCargando(false);
-    } catch (error) {
-      console.error("❌ Error al obtener tickets:", error);
-    }
-  };
-
+    
 const guardarTicket = async (e) => {
     e.preventDefault();
     mostrarCarga();
@@ -162,9 +134,6 @@ const guardarTicket = async (e) => {
       setMostrarModal(false);
       setEditandoId(null); 
       toast.success(editandoId ? "¡Ticket actualizado!" : "¡Ticket generado!");
-
-      // 👇 AGREGAR ESTA LÍNEA: Fuerzo a recargar mis tickets inmediatamente
-      await cargarTickets();
 
     } catch (error) {
       console.error(error);
@@ -230,6 +199,6 @@ const guardarTicket = async (e) => {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, cargarTickets
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, 
   };
 };

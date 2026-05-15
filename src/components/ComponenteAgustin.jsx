@@ -7,7 +7,7 @@ import {
 
 export const DashboardAgustin = ({ tickets }) => {
 
-    // 🧠 1. EL CEREBRO: Función genérica para contar tickets según la propiedad que le pidamos
+    //  1. EL CEREBRO: Función genérica para contar tickets según la propiedad que le pidamos
     const agruparDatos = (propiedad) => {
         const conteo = tickets.reduce((acumulador, ticket) => {
             const clave = ticket[propiedad] || 'Sin especificar';
@@ -23,15 +23,33 @@ export const DashboardAgustin = ({ tickets }) => {
     };
 
     // 📊 2. PROCESAMOS LOS DATOS
-    const datosEstado = useMemo(() => agruparDatos('estado'), [tickets]);
+    const datosEstado = useMemo(() => {const agrupados = agruparDatos('estado'); return agrupados.filter(item => item.nombre !== 'Cerrado Definitivo');}, [tickets]);
     const datosPrioridad = useMemo(() => agruparDatos('prioridad'), [tickets]);
-    const datosArea = useMemo(() => agruparDatos('area_origen'), [tickets]);
+    const datosArea = useMemo(() => agruparDatos('nombre_area_origen'), [tickets]);
     const datosCategoria = useMemo(() => agruparDatos('categoria'), [tickets]);
 
     // 🎨 3. PALETAS DE COLORES
     const coloresEstado = { 'Abierto': '#dc3545', 'En Proceso': '#ffc107', 'Resuelto': '#198754', 'Cerrado Definitivo': '#343a40' };
     const coloresPrioridad = { 'Urgente': '#dc3545', 'Alta': '#fd7e14', 'Media': '#0d6efd', 'Baja': '#20c997' };
     const coloresGenerales = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+   
+    //funcion para que se muestren los porcentajes en el grafico de pastel
+    const RADIAN = Math.PI / 180;
+    const renderEtiquetaPorcentaje = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+    // Calculamos el punto medio exacto de la porción
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  // Si el porcentaje es 0, no dibujamos nada para que no se amontone
+  if (percent === 0) return null;
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+};
 
     return (
         <div className="container-fluid mb-4 animate__animated animate__fadeIn">
@@ -68,15 +86,26 @@ export const DashboardAgustin = ({ tickets }) => {
                             <h6 className="card-title text-center fw-bold text-muted mb-3">Tickets por Prioridad</h6>
                             <div style={{ height: '250px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={datosPrioridad} outerRadius={80} dataKey="cantidad" nameKey="nombre">
+                                    <PieChart width={300} height={300}>
+                                        {/* El formatter personaliza el cuadro que sale al pasar el mouse */}
+                                        <Tooltip formatter={(value) => [`${value} tickets`, 'Cantidad']} />
+                                        <Legend verticalAlign="bottom" height={36} />
+                                        <Pie
+                                            data={datosPrioridad}
+                                            dataKey="cantidad"
+                                            nameKey="nombre"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={100}
+                                            // Agregamos estas dos líneas para los porcentajes visuales:
+                                            labelLine={false} 
+                                            label={renderEtiquetaPorcentaje}
+                                        >
                                             {datosPrioridad.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={coloresPrioridad[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />
+                                            <Cell key={`cell-${index}`} fill={coloresPrioridad[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />
                                             ))}
                                         </Pie>
-                                        <Tooltip />
-                                        <Legend verticalAlign="bottom" height={36}/>
-                                    </PieChart>
+                                        </PieChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>

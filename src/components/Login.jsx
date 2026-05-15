@@ -31,20 +31,14 @@ export default function Login({ cambiarVista, setUsuarioActual }) {
         body: JSON.stringify(formulario)
       });
 
-      // const respuesta = await fetch('https://back-tickets-u01r.onrender.com/api/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formulario)
-      // });
 
       const datos = await respuesta.json();
-
       if (respuesta.ok) {
         // === GUARDADO DE SESIÓN VIP ===
         localStorage.setItem('token_acceso', datos.token); 
         localStorage.setItem('nombre_usuario', datos.usuario.nombre);
-        localStorage.setItem('rol_usuario', datos.usuario.rol); 
-        localStorage.setItem('area_usuario', datos.usuario.area); 
+        localStorage.setItem('rol_usuario', datos.usuario.id_rol); 
+        localStorage.setItem('area_usuario', datos.usuario.id_area); 
         
         // ¡LA LLAVE MAESTRA! Guardamos la hora exacta en la que entró
         localStorage.setItem('horaLogin', new Date().getTime().toString());

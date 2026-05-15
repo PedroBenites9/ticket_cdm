@@ -92,7 +92,6 @@ export const ModalHistorico = ({ tickets, cerrarModal }) => {
                                                 <td className="fw-bold">{ticket.codigo}</td>
                                                 <td>{ticket.asunto}</td>
                                                 <td>{ticket.area_origen || 'N/A'}</td>
-                                                {console.log(ticket)}
                                                 <td>{formatearFecha(ticket.fecha_finalizado) || 'Sin fecha'}</td>
                                                 <td>{ticket.tecnico_asignado || 'N/A'}</td>
                                             </tr>

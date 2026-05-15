@@ -1,5 +1,5 @@
 // React y Bibliotecas de UI
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { 
@@ -27,17 +27,25 @@ import { ModalHistorico } from './ModalHistorico';
 
 //Dashboard Agustin
 import { DashboardAgustin } from './ComponenteAgustin';
+import { ROLES } from '../utils/constants.js';
 
 const socket = io(import.meta.env.VITE_URL_BACKEND || '/');
 
 export default function Main({ cambiarVista, usuario }) {
-  // ==========================================
-  // 1. HOOKS PRINCIPALES
-  // ==========================================
+ 
   const { mostrarCarga, ocultarCarga, VistaCarga } = useCarga();
   const URL_API = import.meta.env.VITE_URL_API || '/api';
-  const rolUsuario = localStorage.getItem('rol_usuario') || 'final';
+  const rolUsuario = parseInt(localStorage.getItem('rol_usuario')) || ROLES.USUARIO_FINAL;
 
+  // Optimización: Validaciones de Roles Cacheadas
+  const miRol = parseInt(rolUsuario);
+  const esAdmin = miRol === ROLES.ADMIN;
+  const esTecnico = miRol === ROLES.TECNICO;
+  const esCoordinadorGral = miRol === ROLES.COORDINADOR_GRAL;
+
+ // ==========================================
+  // 1. HOOKS PRINCIPALES
+  // ==========================================
   // Hook de Tareas
   const [filtroCategoriaTarea, setFiltroCategoriaTarea] = useState('Todas');
   const [busquedaTarea, setBusquedaTarea] = useState('');
@@ -87,13 +95,9 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // Gestión de Tickets y Filtros
   const [busqueda, setBusqueda] = useState('');
-  const [filtroCategoria, setFiltroCategoria] = useState('Todas');
-  const [filtroOrigen, setFiltroOrigen] = useState('Todos');
-  const [filtroPrioridad, setFiltroPrioridad] = useState('Todas');
   const [clientesLista, setClientesLista] = useState([]);
   const [ingresandoNuevoCliente, setIngresandoNuevoCliente] = useState(false);
   const [ordenTickets, setOrdenTickets] = useState('desc');
-  const [verHistorico, setVerHistorico] = useState(false);
   const [filtros, setFiltros] = useState({
       estados: [],     
       origenes: [],
@@ -168,44 +172,14 @@ export default function Main({ cambiarVista, usuario }) {
 
 
   useEffect(() => {
-    const cargarAreas = async () => {
-      try {
-        const res = await fetch('/api/usuarios/areas');
-        if (res.ok) {
-          const data = await res.json();
-          setAreasDisponibles(data);
-        }
-      } catch (error) {
-        console.error("Error cargando áreas", error);
-      }
-    };
-    cargarAreas();
-  }, []);
-
-  useEffect(() => {
     editandoIdRef.current = editandoId;
   }, [editandoId]);
 
-  useEffect(() => {
-    const traerRoles = async () => {
-        try {
-            const response = await fetch(`${URL_API}/usuarios/roles`);
-            const data = await response.json();
-            setListaRoles(data); // ¡Acá se llena el tanque!
-            
-        } catch (error) {
-            console.error("Error al traer los roles:", error);
-        }
-    };
-
-    traerRoles();
-}, []);
   // ==========================================
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
   // Filtramos todas las tareas que NO fueron completadas hoy
-  const tareasActivas = tareas.filter(t => !fueCompletadaHoy(t.ultima_vez_completada));
-  
+  const tareasActivas = useMemo(() => tareas.filter(t => !fueCompletadaHoy(t.ultima_vez_completada)), [tareas, fueCompletadaHoy]);
   const totalPendientes = tareasActivas.length;
   const rutinasEnProceso = tareasActivas.filter(t => t.estado === 'En Curso').length;
   const rutinasAtrasadas = tareasActivas.filter(t => new Date(t.proxima_ejecucion) < new Date()).length;
@@ -219,22 +193,33 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
   // ==========================================
-      useEffect(() => {
-        // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto)
-        const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
-        return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
-    }, []);
 
+  // Efecto para actualizar el tiempo en pantalla (Ticker)
   useEffect(() => {
-    // 1. Carga inicial tradicional (una sola vez)
+    // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto) para refrescar contadores de tiempo en pantalla
+    const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
+    return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
+  }, []);
+
+  // Efecto para la carga inicial de datos desde la API
+  useEffect(() => {
     const obtenerDatos = async () => {
       try {
-        const respuestaTickets = await fetch(`${URL_API}/tickets?rol=${encodeURIComponent(rolUsuario)}&area=${encodeURIComponent(areaUsuario)}`);
-        setTickets(await respuestaTickets.json());
-        const respuestaClientes = await fetch(`${URL_API}/clientes`);
-        setClientesLista(await respuestaClientes.json());
-        const respuestaTareas = await fetch(`${URL_API}/tareas`);
-        setTareas(await respuestaTareas.json());
+        // Obtenemos todos los datos en paralelo para hacer la carga más rápida
+        const [respuestaTickets, respuestaClientes, respuestaTareas, respuestaAreas, respuestaRoles] = await Promise.all([
+          fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}`),
+          fetch(`${URL_API}/clientes`),
+          fetch(`${URL_API}/tareas`),
+          fetch(`${URL_API}/usuarios/areas`),
+          fetch(`${URL_API}/usuarios/roles`)
+        ]);
+        
+        if (respuestaTickets.ok) setTickets(await respuestaTickets.json());
+        if (respuestaClientes.ok) setClientesLista(await respuestaClientes.json());
+        if (respuestaTareas.ok) setTareas(await respuestaTareas.json());
+        if (respuestaAreas.ok) setAreasDisponibles(await respuestaAreas.json());
+        if (respuestaRoles.ok) setListaRoles(await respuestaRoles.json());
+        
         cargarIndicadores();
       } catch (error) {
         toast.error("Error al cargar los datos del servidor.");
@@ -242,67 +227,68 @@ export default function Main({ cambiarVista, usuario }) {
         setCargando(false);
       }
     };
-    obtenerDatos();
-  
-    // ==================================================
-    // 2. MAGIA WEBSOCKETS: TICKETS --> Escuchamos eventos en tiempo real
-    // ==================================================
-    
-    // Si alguien crea un ticket, lo agregamos arriba de la lista y hacemos sonar la alerta
-      socket.on('ticketCreado', (nuevoTicket) => {
-      // 1. REGLA DE PRIVACIDAD (La que ya teníamos)
-      const miRol = rolUsuario || localStorage.getItem('rol_usuario');
-      const miArea = areaUsuario || localStorage.getItem('area_usuario');
-      const miNombre = usuario || localStorage.getItem('nombre_usuario');
 
-      const esAdminOTecnico = miRol === 'admin' || miRol === 'tecnico';
-      const esDeMiArea = nuevoTicket.area_origen === miArea;
-      const loCreeYo = nuevoTicket.solicitante === miNombre;
-      if (esAdminOTecnico || esDeMiArea || loCreeYo) {
+    obtenerDatos();
+  }, []); // <-- Se ejecuta solo una vez al montar el componente
+
+  // Efecto independiente para manejar las conexiones WebSockets en tiempo real
+  useEffect(() => {
+    // ==================================================
+    // WEBSOCKETS: GESTIÓN DE TICKETS Y BITÁCORA
+    // ==================================================
+
+    // 1. Escuchar creación de nuevos tickets
+   const manejarTicketCreado = (nuevoTicket) => {
+        // 1. Aseguramos que todo sea un número entero (parseInt)
+        const miRol = parseInt(localStorage.getItem('rol_usuario') || rolUsuario);
+        const miArea = parseInt(localStorage.getItem('area_usuario') || areaUsuario);
+        const miNombre = localStorage.getItem('nombre_usuario') || usuario;
+
+        // 2. Agregamos al Coordinador General (23) a la lista de VIPs
+        const esAdminOTecnico = miRol === 1 || miRol === 2 || miRol === 23;
         
-        // 2. FILTRO ANTI-DUPLICADOS (La solución al problema)
+        // 3. Comparamos contra la nueva columna id_area del backend
+        const esDeMiArea = nuevoTicket.id_area === miArea;
+        const loCreeYo = nuevoTicket.solicitante === miNombre;
+
+        if (esAdminOTecnico || esDeMiArea || loCreeYo) {
         setTickets((ticketsAnteriores) => {
-          // ¿Ya tengo un ticket con este ID en mi lista?
+          // Filtro anti-duplicados
           const yaExiste = ticketsAnteriores.some(t => t.id === nuevoTicket.id);
+          if (yaExiste) return ticketsAnteriores;
           
-          // Si ya existe, devuelvo la lista como estaba (no hago nada)
-          if (yaExiste) {
-            return ticketsAnteriores;
-          }
-          
-          // Si es realmente nuevo, lo agrego arriba de todo
+          // Agregamos el nuevo ticket arriba de todo
           return [nuevoTicket, ...ticketsAnteriores];
         });
 
-        // 3. SONIDO (Solo si no lo creé yo)
-        if (nuevoTicket.solicitante !== usuario) {
-          new Audio(sonidoAlerta).play().catch(e => {});
+        // Alerta sonora (solo si no lo creé yo)
+        if (nuevoTicket.solicitante !== miNombre) {
+          new Audio(sonidoAlerta).play().catch(() => {});
         }
       }
-    });
-    
-    // Si alguien edita o cambia de estado, actualizamos ese renglón específico
-    socket.on('ticketModificado', (ticketEditado) => {
+    };
+
+    // 2. Escuchar modificaciones de estado o datos de tickets
+    const manejarTicketModificado = (ticketEditado) => {
       setTickets((ticketsAnteriores) => 
         ticketsAnteriores.map(t => t.id === ticketEditado.id ? ticketEditado : t)
       );
-    });
-    
-    // Antena para mensajes de la Bitácora
-    socket.on('nuevoComentario', (comentarioNuevo) => {
+    };
+
+    // 3. Escuchar nuevos comentarios (Bitácora)
+    const manejarNuevoComentario = (comentarioNuevo) => {
+      const miNombre = localStorage.getItem('nombre_usuario') || usuario;
       
-      // 1. Suena la alerta SOLO si el mensaje lo escribió otra persona
-      if (comentarioNuevo.autor !== usuario) {
-        const audio = new Audio(sonidoAlerta);
-        audio.play().catch(e => console.log("Audio bloqueado", e));
+      // Alerta sonora (solo si el mensaje es de otra persona)
+      if (comentarioNuevo.autor !== miNombre) {
+        new Audio(sonidoAlerta).play().catch(() => {});
       }
 
-      // 2. ¿Tengo este ticket abierto en mi pantalla ahora mismo?
+      // Si tenemos abierto el modal de este ticket, actualizamos el chat en vivo
       if (editandoIdRef.current === comentarioNuevo.ticket_id) {
-        // Sí, lo tengo abierto. Actualizo el chat al instante sin recargar.
         setComentarios(prev => [...prev, comentarioNuevo]);
       } else {
-        // No lo tengo abierto. ¡Encendemos el puntito rojo en la tabla!
+        // Si el chat no está abierto, agregamos el puntito de notificación en la tabla
         setTicketsConMensaje(prev => {
           if (!prev.includes(comentarioNuevo.ticket_id)) {
             return [...prev, comentarioNuevo.ticket_id];
@@ -310,93 +296,89 @@ export default function Main({ cambiarVista, usuario }) {
           return prev;
         });
       }
-    });
+    };
+
     // ==================================================
-    // MAGIA WEBSOCKETS: RUTINAS
+    // WEBSOCKETS: GESTIÓN DE RUTINAS Y TAREAS
     // ==================================================
-    
-    // Antena 1: Si alguien crea una nueva rutina
-    socket.on('tareaCreada', (nuevaTarea) => {
+
+    const manejarTareaCreada = (nuevaTarea) => {
       cargarIndicadores();
       setTareas((tareasAnteriores) => {
-        
-        // Filtro anti-eco: ¿La tarea nueva ya la tengo dibujada?
         const yaExiste = tareasAnteriores.some(t => t.id === nuevaTarea.id);
         if (yaExiste) return tareasAnteriores;
-        
-        // Si no la tengo, la agrego y ordeno la lista por hora
+        // Ordenamos las rutinas por su próxima hora de ejecución
         return [...tareasAnteriores, nuevaTarea].sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
       });
-    });
+    };
 
-    // Antena 2: Si alguien completa una rutina
-    socket.on('tareaCompletada', (tareaActualizada) => {
-      setTareas((tareasAnteriores) => {
-        // Busco la tarea vieja en mi lista y la reemplazo por la nueva (que ya viene tachada del backend)
-        const nuevasTareas = tareasAnteriores.map(t => t.id === tareaActualizada.id ? tareaActualizada : t);
-        
-        // Vuelvo a ordenar por si acaso
-        return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
-      });
-    });
-    // ---> NUEVO: Antena 3: Si alguien inicia o pausa una tarea
-    socket.on('tareaModificada', (tareaActualizada) => {
+    const manejarTareaCompletada = (tareaActualizada) => {
       setTareas((tareasAnteriores) => {
         const nuevasTareas = tareasAnteriores.map(t => t.id === tareaActualizada.id ? tareaActualizada : t);
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
       });
-    });
-    // ---> NUEVO: Antena 4: Si alguien elimina una tarea
-    socket.on('tareaEliminada', (idTareaEliminada) => {
+    };
+
+    const manejarTareaModificada = (tareaActualizada) => {
+      setTareas((tareasAnteriores) => {
+        const nuevasTareas = tareasAnteriores.map(t => t.id === tareaActualizada.id ? tareaActualizada : t);
+        return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
+      });
+    };
+
+    const manejarTareaEliminada = (idTareaEliminada) => {
       setTareas((tareasAnteriores) => tareasAnteriores.filter(t => t.id !== idTareaEliminada));
-    });
-    // NUEVO: Escuchar cuando alguien crea un cliente externo nuevo
-    socket.on('clienteCreado', (nuevoCliente) => {
+    };
+
+    // ==================================================
+    // WEBSOCKETS: GESTIÓN DE CLIENTES EXTERNOS
+    // ==================================================
+
+    const manejarClienteCreado = (nuevoCliente) => {
       setClientesLista((prevLista) => {
-        // Verificamos que no esté duplicado por las dudas
         const existe = prevLista.find(c => c.id === nuevoCliente.id);
         if (existe) return prevLista;
-        
-        // Lo agregamos a la lista y la re-ordenamos alfabéticamente
-        const listaActualizada = [...prevLista, nuevoCliente];
-        return listaActualizada.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        return [...prevLista, nuevoCliente].sort((a, b) => a.nombre.localeCompare(b.nombre));
       });
-    });
+    };
 
-    // Y recuerda apagarla en el return de limpieza que está justo abajo:
+    // Registramos todos los 'escuchadores' al socket
+    socket.on('ticketCreado', manejarTicketCreado);
+    socket.on('ticketModificado', manejarTicketModificado);
+    socket.on('nuevoComentario', manejarNuevoComentario);
+    
+    socket.on('tareaCreada', manejarTareaCreada);       
+    socket.on('tareaCompletada', manejarTareaCompletada);   
+    socket.on('tareaModificada', manejarTareaModificada);
+    socket.on('tareaEliminada', manejarTareaEliminada);
+    
+    socket.on('clienteCreado', manejarClienteCreado);
+
+    // Función de limpieza: Se ejecuta al desmontar el componente para evitar duplicaciones
     return () => {
-      socket.off('ticketCreado');
-      socket.off('ticketModificado');
-      socket.off('tareaCreada');       
-      socket.off('tareaCompletada');   
-      socket.off('tareaModificada');
-      socket.off('tareaEliminada');
-      socket.off('nuevoComentario');
-      socket.off('clienteCreado');
+      socket.off('ticketCreado', manejarTicketCreado);
+      socket.off('ticketModificado', manejarTicketModificado);
+      socket.off('nuevoComentario', manejarNuevoComentario);
+      
+      socket.off('tareaCreada', manejarTareaCreada);       
+      socket.off('tareaCompletada', manejarTareaCompletada);   
+      socket.off('tareaModificada', manejarTareaModificada);
+      socket.off('tareaEliminada', manejarTareaEliminada);
+      
+      socket.off('clienteCreado', manejarClienteCreado);
     };  
-    }, []); // <-- El array vacío asegura que la conexión se crea una sola vez
+  }, []); // <-- El array vacío asegura que las antenas se conecten una sola vez al cargar
 
+  // Efecto para hacer scroll al final de los comentarios del chat
   useEffect(() => {
     if (finalDelChatRef.current) {
       finalDelChatRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [comentarios]);
 
-
-
   // ==========================================
   // 7. FUNCIONES HANDLERS (MODALES Y DATOS)
   // ==========================================
-  const cargarComentarios = async (idTicket) => {
-    try {
-      const respuesta = await fetch(`${URL_API}/tickets/${idTicket}/comentarios`);
-      const datos = await respuesta.json();
-      setComentarios(datos);
-    } catch (error) {
-      console.error("Error al cargar comentarios", error);
-    }
-  };
-
 
   const exportarAExcel = () => {
     const datosParaExcel = ticketsFiltrados.map(ticket => ({
@@ -447,73 +429,54 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 8. FILTRADO, ESTADÍSTICAS Y PAGINACIÓN
   // ==========================================
+  const ticketsFiltrados = useMemo(() => {
+    return tickets.filter(ticket => {
+      if (ticket.estado === 'Cerrado Definitivo') return false;
 
-  const ticketsFiltrados = tickets.filter(ticket => {
-    // 1. Evitamos errores si algún texto viene nulo o indefinido
-    const asuntoSafe = ticket.asunto || '';
-    const codigoSafe = ticket.codigo || '';
-    const areaSafe = ticket.area_origen || '';
-    const solicitanteSafe = ticket.solicitante || '';
+      // Buscador general (asunto, código, solicitante, cliente)
+      if (busqueda.trim() !== '') {
+        const bLower = busqueda.toLowerCase();
+        const coincideBusqueda = 
+          (ticket.asunto || '').toLowerCase().includes(bLower) ||
+          (ticket.solicitante || '').toLowerCase().includes(bLower) ||
+          (ticket.cliente || '').toLowerCase().includes(bLower) ||
+          (ticket.codigo || '').toLowerCase().includes(bLower);
+        if (!coincideBusqueda) return false;
+      }
 
-    // 2. Filtros de la barra superior (Múltiple Selección)
-    const matchBusqueda = !busqueda || asuntoSafe.toLowerCase().includes(busqueda.toLowerCase()) || codigoSafe.toLowerCase().includes(busqueda.toLowerCase());
+      // Filtros por Categoría, Prioridad, Estado, Origen
+      if (filtros.categorias?.length > 0 && !filtros.categorias.includes(ticket.categoria)) return false;
+      if (filtros.prioridades?.length > 0 && !filtros.prioridades.includes(ticket.prioridad)) return false;
+      if (filtros.estados?.length > 0 && !filtros.estados.includes(ticket.estado)) return false;
+      if (filtros.origenes?.length > 0 && !filtros.origenes.includes(ticket.tipo_origen || 'Interno')) return false;
 
-    // 💡 Función salvavidas: Convierte todo a minúsculas y le corta los espacios extra
-    const limpiarTexto = (texto) => (texto || '').toString().toLowerCase().trim();
-
-    // 2. Filtros de la barra superior (Multiselect a prueba de balas)
-    const matchOrigen = !filtros.origenes?.length || 
-        filtros.origenes.some(filtro => limpiarTexto(ticket.tipo_origen || ticket.origen) === limpiarTexto(filtro));
-
-    const matchCategoria = !filtros.categorias?.length || 
-        filtros.categorias.some(filtro => limpiarTexto(ticket.categoria) === limpiarTexto(filtro));
-
-    const matchPrioridad = !filtros.prioridades?.length || 
-        filtros.prioridades.some(filtro => limpiarTexto(ticket.prioridad) === limpiarTexto(filtro));
-
-    const matchEstado = !filtros.estados?.length || 
-        filtros.estados.some(filtro => limpiarTexto(ticket.estado) === limpiarTexto(filtro));
-
-    // REGLA DE ORO: En la tabla principal NUNCA mostramos los Cerrados Definitivos
-    const matchNoEsHistorico = ticket.estado !== 'Cerrado Definitivo';
-
-    // 3. Filtro de Privacidad (Capa 2) ¡Inmune a mayúsculas y espacios extras!
-    const miRol = (rolUsuario || localStorage.getItem('rol_usuario') || '').toLowerCase().trim();
-    const miArea = (localStorage.getItem('area_usuario') || '').toLowerCase().trim();
-    const miNombre = (usuario || localStorage.getItem('nombre_usuario') || '').toLowerCase().trim();
-
-    const esAdminOTecnico = miRol === 'admin' || miRol === 'tecnico';
-    const esDeMiArea = areaSafe.toLowerCase().trim() === miArea;
-    const loCreeYo = solicitanteSafe.toLowerCase().trim() === miNombre;
-
-    const matchPrivacidad = esAdminOTecnico || esDeMiArea || loCreeYo;
-
-    // Solo se muestra en la tabla si pasa todas las pruebas
-    return matchBusqueda && matchNoEsHistorico && matchOrigen && matchCategoria && matchPrioridad && matchEstado && matchPrivacidad;
-  });
+      return true;
+    });
+  }, [tickets, busqueda, filtros]);
 
  // ==========================================
   // LÓGICA DE ORDENAMIENTO (Menú Desplegable)
   // ==========================================
-  const ticketsOrdenados = [...ticketsFiltrados].sort((a, b) => {
-    
-    if (ordenTickets === 'fecha_desc') {
-      // Usamos el ID en lugar de la fecha. ¡El ID más grande siempre es el más nuevo!
-      return b.id - a.id; 
-    }
-    if (ordenTickets === 'fecha_asc') {
-      return a.id - b.id; // El ID más chico es el más antiguo
-    }
-    if (ordenTickets === 'prioridad') {
-      const peso = { 'Urgente': 4, 'Alta': 3, 'Media': 2, 'Baja': 1 };
-      return (peso[b.prioridad] || 0) - (peso[a.prioridad] || 0); // Urgentes arriba
-    }
-    if (ordenTickets === 'estado') {
-      const peso = { 'Abierto': 1, 'En Proceso': 2, 'Resuelto': 3, 'Cerrado Definitivo': 4 };
-      return (peso[a.estado] || 0) - (peso[b.estado] || 0); // Abiertos arriba
-    }
-    return 0;
-  });
+  const ticketsOrdenados = useMemo(() => {
+    return [...ticketsFiltrados].sort((a, b) => {
+      if (ordenTickets === 'fecha_desc') {
+        // Usamos el ID en lugar de la fecha. ¡El ID más grande siempre es el más nuevo!
+        return b.id - a.id; 
+      }
+      if (ordenTickets === 'fecha_asc') {
+        return a.id - b.id; // El ID más chico es el más antiguo
+      }
+      if (ordenTickets === 'prioridad') {
+        const peso = { 'Urgente': 4, 'Alta': 3, 'Media': 2, 'Baja': 1 };
+        return (peso[b.prioridad] || 0) - (peso[a.prioridad] || 0); // Urgentes arriba
+      }
+      if (ordenTickets === 'estado') {
+        const peso = { 'Abierto': 1, 'En Proceso': 2, 'Resuelto': 3, 'Cerrado Definitivo': 4 };
+        return (peso[a.estado] || 0) - (peso[b.estado] || 0); // Abiertos arriba
+      }
+      return 0;
+    });
+  }, [ticketsFiltrados, ordenTickets]);
 
   // ==========================================
   // LÓGICA DE MANEJO DE CHECKBOX PARA FILTROS MULTPLES
@@ -537,43 +500,64 @@ export default function Main({ cambiarVista, usuario }) {
   const indiceUltimoTicket = paginaActual * ticketsPorPagina;
   const indicePrimerTicket = indiceUltimoTicket - ticketsPorPagina;
   
- // 1. Filtramos los tickets ordenados para que el Coordinador solo vea los suyos
-  const ticketsParaLaTabla = rolUsuario === 'coordinador'
-      ? ticketsOrdenados.filter(t => 
-        t.solicitante === usuario)
-      : ticketsOrdenados;
+  // Si sos Admin (1), Técnico (2) o Coordinador Gral (23), ves toda la lista ordenada.
+  // Si sos un usuario final, el filtro solo deja pasar los tickets que vos creaste.
 
-  // 2. Paginamos sobre la lista restringida
+  const ticketsParaLaTabla = useMemo(() => {
+    if (esAdmin || esTecnico) {
+      return ticketsOrdenados;
+    }
+    
+    if (esCoordinadorGral) {
+      // El coordinador general solo ve los tickets de su área en la tabla
+      return ticketsOrdenados.filter(t => t.id_area === parseInt(areaUsuario));
+    }
+    
+    // Usuario final: solo ve los suyos (creados por él)
+    return ticketsOrdenados.filter(t => {
+        const solicitanteLimpio = (t.solicitante || '').toLowerCase().trim();
+        const usuarioLimpio = (usuario || '').toLowerCase().trim();
+        return solicitanteLimpio === usuarioLimpio;
+    });
+  }, [ticketsOrdenados, esAdmin, esTecnico, esCoordinadorGral, usuario, areaUsuario]);
+
   const ticketsPaginados = ticketsParaLaTabla.slice(indicePrimerTicket, indiceUltimoTicket);
+    
+    // 3. Calculamos cuántas páginas hay en total basados en lo que realmente puede ver
+    const totalPaginas = Math.ceil(ticketsParaLaTabla.length / ticketsPorPagina);
+    
 
-  // 3. Calculamos cuántas páginas hay en total basados en lo que realmente puede ver
-  const totalPaginas = Math.ceil(ticketsParaLaTabla.length / ticketsPorPagina);
-
-  // Si el usuario busca algo y los resultados bajan, lo devolvemos a la página 1
+  // Si el usuario busca algo o aplica un filtro y los resultados bajan, lo devolvemos a la página 1
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroCategoria, filtroOrigen]);
+  }, [busqueda, filtros]);
 
-  const ticketsAbiertos = tickets.filter(t => t.estado === 'Abierto').length;
-  const ticketsEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
-  const ticketsResueltos = tickets.filter(t => t.estado === 'Resuelto').length;
+  const ticketsAbiertos = useMemo(() => tickets.filter(t => t.estado === 'Abierto').length, [tickets]);
+  const ticketsEnProceso = useMemo(() => tickets.filter(t => t.estado === 'En Proceso').length, [tickets]);
+  const ticketsResueltos = useMemo(() => tickets.filter(t => t.estado === 'Resuelto').length, [tickets]);
   const totalTickets = ticketsAbiertos + ticketsEnProceso + ticketsResueltos;  
-  const datosEstado = [
+  
+  const datosEstado = useMemo(() => [
     { name: 'Abiertos', value: ticketsAbiertos },
     { name: 'En Proceso', value: ticketsEnProceso },
     { name: 'Resueltos', value: ticketsResueltos },
-  ];
+  ], [ticketsAbiertos, ticketsEnProceso, ticketsResueltos]);
+  
   const COLORES_ESTADO = ['#dc3545', '#ffc107', '#198754']; 
 
-  const conteoCategorias = tickets.reduce((acc, ticket) => {
-    acc[ticket.categoria] = (acc[ticket.categoria] || 0) + 1;
-    return acc;
-  }, {});
+  const conteoCategorias = useMemo(() => {
+    return tickets.reduce((acc, ticket) => {
+      acc[ticket.categoria] = (acc[ticket.categoria] || 0) + 1;
+      return acc;
+    }, {});
+  }, [tickets]);
   
-  const datosCategoria = Object.keys(conteoCategorias).map(key => ({
-    name: key,
-    cantidad: conteoCategorias[key]
-  }));
+  const datosCategoria = useMemo(() => {
+    return Object.keys(conteoCategorias).map(key => ({
+      name: key,
+      cantidad: conteoCategorias[key]
+    }));
+  }, [conteoCategorias]);
 
   const cambiarAreaUsuario = async (idUsuario, nuevaArea) => {
     try {
@@ -621,18 +605,20 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // LÓGICA DE FILTRADO PARA TAREAS / RUTINAS
   // ==========================================
-  const tareasFiltradas = tareas.filter((tarea) => {
-    const busquedaLower = busquedaTarea.toLowerCase();
-    const coincideBusqueda = 
-      tarea.titulo?.toLowerCase().includes(busquedaLower) || 
-      tarea.descripcion?.toLowerCase().includes(busquedaLower) ||
-      tarea.categoria?.toLowerCase().includes(busquedaLower) ||
-      tarea.frecuencia?.toLowerCase().includes(busquedaLower) ||
-      tarea.estado?.toLowerCase().includes(busquedaLower);
+  const tareasFiltradas = useMemo(() => {
+    return tareas.filter((tarea) => {
+      const busquedaLower = busquedaTarea.toLowerCase();
+      const coincideBusqueda = 
+        tarea.titulo?.toLowerCase().includes(busquedaLower) || 
+        tarea.descripcion?.toLowerCase().includes(busquedaLower) ||
+        tarea.categoria?.toLowerCase().includes(busquedaLower) ||
+        tarea.frecuencia?.toLowerCase().includes(busquedaLower) ||
+        tarea.estado?.toLowerCase().includes(busquedaLower);
 
-    const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
-    return coincideBusqueda && coincideCategoria;
-  });
+      const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
+      return coincideBusqueda && coincideCategoria;
+    });
+  }, [tareas, busquedaTarea, filtroCategoriaTarea]);
   
   // ==========================================
   // 10. RENDERIZADO DEL COMPONENTE (UI)
@@ -658,10 +644,12 @@ export default function Main({ cambiarVista, usuario }) {
           
           <div className="d-flex align-items-center gap-3">
            <span className="text-light d-none d-md-inline">
-              🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areaUsuario})</span>
-              <span className="badge bg-secondary ms-2">{rolUsuario.toUpperCase()}</span>
+              🙋🏼 Hola, <strong>{usuario}</strong> <span className="text-info ms-1">({areasDisponibles.find(a => a.id === parseInt(areaUsuario))?.nombre || areaUsuario})</span>
+              <span className="badge bg-secondary ms-2">
+                {listaRoles.find(r => r.id === parseInt(rolUsuario))?.nombre || 'CARGANDO...'}
+              </span>
             </span>
-            {rolUsuario === 'admin' && (
+            {rolUsuario === ROLES.ADMIN && (
               <button className="btn btn-warning btn-sm fw-bold shadow-sm" onClick={abrirPanelUsuarios}>
                 👥 Usuarios
               </button>
@@ -692,7 +680,7 @@ export default function Main({ cambiarVista, usuario }) {
         </button>
       </li>
       
-      {(rolUsuario === 'admin' || rolUsuario === 'tecnico') &&  (
+      {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) &&  (
             <li className="nav-item">
               <button 
                 className={`nav-link text-dark d-flex align-items-center ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} 
@@ -717,13 +705,13 @@ export default function Main({ cambiarVista, usuario }) {
           <div className="animate__animated animate__fadeIn">
             <div className="d-flex justify-content-between align-items-center mb-4">
           
-          {rolUsuario === 'tecnico'&&(
+          {parseInt(rolUsuario) === ROLES.TECNICO &&(
             <h2 className="h3 text-secondary">Tickets</h2>
-          )|| rolUsuario === 'final'&&(
+          )|| parseInt(rolUsuario) === ROLES.USUARIO_FINAL &&(
             <h2 className="h3 text-secondary">Mis Incidencias</h2>
           )}
           <div className="d-flex gap-2">
-            {rolUsuario === 'admin' && (
+            {parseInt(rolUsuario) === ROLES.ADMIN && (
               <button className="btn btn-success fw-bold shadow-sm" onClick={exportarAExcel}>
                 📊 Descargar Excel
               </button>
@@ -737,7 +725,7 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         </div>
 
-        {rolUsuario === 'admin' && (
+        {parseInt(rolUsuario) === ROLES.ADMIN && (
           <div className="row mb-4">
             <div className="col-md-3 col-6 mb-3">
               <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
@@ -773,8 +761,11 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
           </div>
         )}
-
-        {(rolUsuario === 'admin' ) && (
+        {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.COORDINADOR_GRAL) && (
+              <DashboardAgustin tickets={tickets}/>
+        )}
+        {console.log(tickets)}
+        {(parseInt(rolUsuario) === ROLES.ADMIN ) && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
@@ -812,10 +803,6 @@ export default function Main({ cambiarVista, usuario }) {
               </div>
             </div>            
           </div>
-        )}
-
-        {(rolUsuario?.toLowerCase() === 'admin' || areaUsuario?.toLowerCase() === 'coordinador gral.') && (
-              <DashboardAgustin tickets={tickets}/>
         )}
 
         {/* 10. Filtros Globales (Disponibles para todos los usuarios) */}
@@ -1014,7 +1001,7 @@ export default function Main({ cambiarVista, usuario }) {
                 <tr>
                   <th>Código</th>
                   <th>Origen</th>
-                  {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                  {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
                   <th>Solicitante / Cliente</th>
                   )}
                   <th>Asunto</th>
@@ -1032,6 +1019,7 @@ export default function Main({ cambiarVista, usuario }) {
                    <tr key={ticket.id} title={ticket.descripcion} 
                     style={{ cursor: 'pointer' }}>
                       {/* 1. Código */}
+                      
                       <td className="fw-bold">{ticket.codigo}</td>
                       
                       {/* 2. Origen */}
@@ -1040,7 +1028,7 @@ export default function Main({ cambiarVista, usuario }) {
                           {ticket.tipo_origen || 'Interno'}
                         </span>
                       </td>
-                        {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && (
+                        {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
                         <td>
                           {ticket.tipo_origen === 'Externo' ? (
                             <span className="fw-bold" style={{ color: '#6f42c1' }}>🏢 {ticket.cliente || 'Sin cliente'}</span>
@@ -1097,14 +1085,14 @@ export default function Main({ cambiarVista, usuario }) {
                           </div>
                         ) : (
                           <div className="d-flex justify-content-center align-items-center gap-1">
-                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN) && (
                                <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
                                  <option value="Abierto">Abierto</option>
                                  <option value="En Proceso">En Proceso</option>
                                  <option value="Resuelto" className="fw-bold text-success">Resuelto</option>
                                </select>
                              )}
-                             {(rolUsuario === 'tecnico' || rolUsuario === 'admin') && (
+                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN) && (
                                <button className="btn btn-info btn-sm text-white" title="Asignarme a mí" onClick={() => asignarmeTicket(ticket.id)}>🙋‍♂️</button>
                              )}   
                              <button 
@@ -1119,7 +1107,7 @@ export default function Main({ cambiarVista, usuario }) {
                                  </span>
                                )}
                              </button>
-                             {(rolUsuario === 'admin' || ticket.solicitante === (usuario || localStorage.getItem('nombre_usuario'))) && (
+                             {(parseInt(rolUsuario) === ROLES.ADMIN || ticket.solicitante === (usuario || localStorage.getItem('nombre_usuario'))) && (
                                <button 
                                  className="btn btn-danger btn-sm" 
                                  title="Eliminar Ticket"
@@ -1175,12 +1163,12 @@ export default function Main({ cambiarVista, usuario }) {
         {/* ==================================================== */}
         {/* VISTA 2: NUEVA PANTALLA DE TAREAS RECURRENTES          */}
         {/* ==================================================== */}
-        {(rolUsuario === 'admin' || rolUsuario === 'tecnico') && pestañaActual === 'tareas' && (
+        {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && pestañaActual === 'tareas' && (
           <div className="animate__animated animate__fadeIn">
             <h2 className="h3 text-secondary">Control de Tareas Diarias</h2>
               
               <div className="d-flex gap-2">
-                {rolUsuario === 'admin' && (
+                {parseInt(rolUsuario) === ROLES.ADMIN && (
                   <button className="btn btn-success fw-bold shadow-sm" onClick={exportarHistorialTareas}>
                     📊 Descargar Historial
                   </button>
