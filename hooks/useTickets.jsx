@@ -115,8 +115,7 @@ const guardarTicket = async (e) => {
 
       const paqueteAEnviar = { 
         ...formulario, 
-        solicitante: nombreReal,
-        area_origen: areaReal,
+        solicitante: formulario.solicitante || nombreReal,
         usuario_actual: nombreReal // Necesario para que el backend valide edición de descripción
       };
 

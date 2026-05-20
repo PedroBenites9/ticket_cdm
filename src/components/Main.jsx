@@ -24,6 +24,7 @@ import ModalUsuarios from './ModalUsuarios';
 import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
 import { ModalHistorico } from './ModalHistorico'; 
+import ModalHistoricoTareas from './ModalHistoricoTareas';
 
 //Dashboard Agustin
 import { DashboardAgustin } from './ComponenteAgustin';
@@ -118,11 +119,15 @@ export default function Main({ cambiarVista, usuario }) {
   const [areasDisponibles, setAreasDisponibles] = useState([]);
   const [areaUsuario, setAreaUsuario] = useState(localStorage.getItem('area_usuario') || '');
   const [listaRoles, setListaRoles] = useState([]);
+  const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
+  const [historialSeleccionado, setHistorialSeleccionado] = useState([]); 
 
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
 
-
+  //filtros de tareas 
+  const [ordenTareas, setOrdenTareas] = useState('proxima'); // Por defecto ordena por fecha
+  
   // ==========================================
   // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
   // ==========================================
@@ -178,14 +183,6 @@ export default function Main({ cambiarVista, usuario }) {
   // ==========================================
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
-  // Filtramos todas las tareas que NO fueron completadas hoy
-  const tareasActivas = useMemo(() => tareas.filter(t => !fueCompletadaHoy(t.ultima_vez_completada)), [tareas, fueCompletadaHoy]);
-  const totalPendientes = tareasActivas.length;
-  const rutinasEnProceso = tareasActivas.filter(t => t.estado === 'En Curso').length;
-  const rutinasAtrasadas = tareasActivas.filter(t => new Date(t.proxima_ejecucion) < new Date()).length;
-  
-  // Las finalizadas son únicamente las que YA se hicieron hoy
-  const rutinasFinalizadas = tareas.filter(t => fueCompletadaHoy(t.ultima_vez_completada)).length;
   
   // Hook para hacer "latir" a React cada 1 minuto
   const [ticker, setTicker] = useState(0);
@@ -206,12 +203,13 @@ export default function Main({ cambiarVista, usuario }) {
     const obtenerDatos = async () => {
       try {
         // Obtenemos todos los datos en paralelo para hacer la carga más rápida
-        const [respuestaTickets, respuestaClientes, respuestaTareas, respuestaAreas, respuestaRoles] = await Promise.all([
+        const [respuestaTickets, respuestaClientes, respuestaTareas, respuestaAreas, respuestaRoles, respuestaUsuario] = await Promise.all([
           fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}`),
           fetch(`${URL_API}/clientes`),
           fetch(`${URL_API}/tareas`),
           fetch(`${URL_API}/usuarios/areas`),
-          fetch(`${URL_API}/usuarios/roles`)
+          fetch(`${URL_API}/usuarios/roles`),
+          fetch(`${URL_API}/usuarios`)
         ]);
         
         if (respuestaTickets.ok) setTickets(await respuestaTickets.json());
@@ -219,6 +217,7 @@ export default function Main({ cambiarVista, usuario }) {
         if (respuestaTareas.ok) setTareas(await respuestaTareas.json());
         if (respuestaAreas.ok) setAreasDisponibles(await respuestaAreas.json());
         if (respuestaRoles.ok) setListaRoles(await respuestaRoles.json());
+        if (respuestaUsuario.ok) setUsuariosLista(await respuestaUsuario.json());
         
         cargarIndicadores();
       } catch (error) {
@@ -606,22 +605,178 @@ export default function Main({ cambiarVista, usuario }) {
   // LÓGICA DE FILTRADO PARA TAREAS / RUTINAS
   // ==========================================
   const tareasFiltradas = useMemo(() => {
-    return tareas.filter((tarea) => {
-      const busquedaLower = busquedaTarea.toLowerCase();
-      const coincideBusqueda = 
-        tarea.titulo?.toLowerCase().includes(busquedaLower) || 
-        tarea.descripcion?.toLowerCase().includes(busquedaLower) ||
-        tarea.categoria?.toLowerCase().includes(busquedaLower) ||
-        tarea.frecuencia?.toLowerCase().includes(busquedaLower) ||
-        tarea.estado?.toLowerCase().includes(busquedaLower);
+    // 1. Primero filtramos (lo que ya tenías)
+    let resultado = tareas.filter((tarea) => {
+        const busquedaLower = busquedaTarea.toLowerCase();
+        const coincideBusqueda = 
+            tarea.titulo?.toLowerCase().includes(busquedaLower) ||
+            tarea.descripcion?.toLowerCase().includes(busquedaLower) ||
+            tarea.categoria?.toLowerCase().includes(busquedaLower) ||
+            tarea.frecuencia?.toLowerCase().includes(busquedaLower) ||
+            tarea.estado?.toLowerCase().includes(busquedaLower);
 
-      const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
-      return coincideBusqueda && coincideCategoria;
+        const coincideCategoria = filtroCategoriaTarea === 'Todas' || tarea.categoria === filtroCategoriaTarea;
+        return coincideBusqueda && coincideCategoria;
     });
-  }, [tareas, busquedaTarea, filtroCategoriaTarea]);
+
+    // 2. Después ordenamos según el nuevo estado
+  resultado.sort((a, b) => {
+        // 1. ORDEN POR CATEGORÍA
+        if (ordenTareas === 'categoria') {
+            const catA = a.categoria || "";
+            const catB = b.categoria || "";
+            return catA.localeCompare(catB);
+        }
+
+        // 2. ORDEN POR NOMBRE
+        if (ordenTareas === 'nombre') {
+            const nombreA = a.nombre_rutina || a.titulo || "";
+            const nombreB = b.nombre_rutina || b.titulo || "";
+            return nombreA.localeCompare(nombreB);
+        }
+
+        // --- HELPER DE FECHAS ROBUSTO ---
+        const obtenerTiempo = (fechaStr) => {
+            if (!fechaStr) return Infinity;
+            // Si es formato DB (YYYY-MM-DD)
+            if (fechaStr.includes('-')) return new Date(fechaStr).getTime();
+            // Si es formato Tabla (DD/MM/YYYY HH:mm)
+            const parts = fechaStr.split(/[\/\s:]/);
+            if (parts.length >= 5) {
+                const [d, m, y, hh, mm] = parts;
+                return new Date(y, m - 1, d, hh, mm).getTime();
+            }
+            const ms = new Date(fechaStr).getTime();
+            return isNaN(ms) ? Infinity : ms;
+        };
+
+        const tiempoA = obtenerTiempo(a.proxima_ejecucion);
+        const tiempoB = obtenerTiempo(b.proxima_ejecucion);
+        const ahora = new Date().getTime();
+
+        // 3. ORDEN POR PRÓXIMA EJECUCIÓN (Estrictamente Cronológico)
+        if (ordenTareas === 'proxima') {
+            return tiempoA - tiempoB;
+        }
+
+        // 4. EL ORDEN INTELIGENTE (ATRASADA > PROCESO > PAUSA > PENDIENTE)
+        if (ordenTareas === 'atrasadas') {
+            
+            // Función interna que asigna el "peso" (1 al 5) según el estado
+            const obtenerPrioridad = (tarea, tiempo) => {
+                const estado = (tarea.estado || "").toUpperCase();
+                
+                // PRIORIDAD 1: ATRASADAS (Fecha vieja y NO están activas ni finalizadas)
+                if (tiempo < ahora && estado !== 'EN CURSO' && estado !== 'EN PROCESO' && estado !== 'PAUSADA' && estado !== 'EN PAUSA' && estado !== 'FINALIZADA') {
+                    return 1;
+                }
+                
+                // PRIORIDAD 2: EN PROCESO
+                if (estado === 'EN CURSO' || estado === 'EN PROCESO') return 2;
+                
+                // PRIORIDAD 3: EN PAUSA
+                if (estado === 'PAUSADA' || estado === 'EN PAUSA') return 3;
+                
+                // PRIORIDAD 5: FINALIZADAS (Las mandamos al fondo de la tabla)
+                if (estado === 'FINALIZADA') return 5;
+                
+                // PRIORIDAD 4: EMPEZAR / PROXIMAS (Todo lo que está pendiente a futuro)
+                return 4;
+            };
+
+            const prioridadA = obtenerPrioridad(a, tiempoA);
+            const prioridadB = obtenerPrioridad(b, tiempoB);
+
+            // Primero ordenamos por nuestro sistema de pesos (1 gana, 5 pierde)
+            if (prioridadA !== prioridadB) {
+                return prioridadA - prioridadB; 
+            }
+            
+            // DESEMPATE: Si dos tareas tienen el mismo peso (ej: ambas son Prioridad 1),
+            // ponemos arriba la que tenga la fecha más vieja.
+            return tiempoA - tiempoB;
+        }
+
+        return 0;
+    });
+
+    return resultado;
+}, [tareas, busquedaTarea, filtroCategoriaTarea, ordenTareas]); // 👈 Importante agregar ordenTareas aquí
   
   // ==========================================
-  // 10. RENDERIZADO DEL COMPONENTE (UI)
+  // 10. TAREAS: Logica de TAREAS y RUTINAS
+  // ==========================================
+    // HELPER UNIVERSAL PARA PARSEAR FECHAS DE TAREAS
+    const obtenerTiempo = (fechaStr) => {
+        if (!fechaStr) return Infinity;
+        // Si es formato DB (YYYY-MM-DD)
+        if (fechaStr.includes('-')) return new Date(fechaStr).getTime();
+        
+        // Si es formato Tabla (DD/MM/YYYY HH:mm o D/M/YYYY)
+        const parts = fechaStr.split(/[\/\s:]/);
+        if (parts.length >= 3) { // Al menos día, mes y año
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1; // Los meses en JS empiezan en 0
+            const y = parseInt(parts[2], 10);
+            const hh = parts[3] ? parseInt(parts[3], 10) : 0;
+            const mm = parts[4] ? parseInt(parts[4], 10) : 0;
+            return new Date(y, m, d, hh, mm).getTime();
+        }
+        
+        const ms = new Date(fechaStr).getTime();
+        return isNaN(ms) ? Infinity : ms;
+    };
+    const tareasTotales = tareas.length;
+    // 1. Lo que ya se terminó (Contador Verde)
+    const rutinasFinalizadas = tareas.filter(t => fueCompletadaHoy(t.ultima_vez_completada)).length;
+
+    // 2. Lo que falta terminar hoy (para repartir en los demás)
+    const tareasPendientesHoy = tareas.filter(t => !fueCompletadaHoy(t.ultima_vez_completada));
+
+    const hoy = new Date();
+    // --- REPARTO DE PENDIENTES ---
+
+    // EN CURSO: Solo las que están activas ahora
+    const rutinasEnProceso = tareasPendientesHoy.filter(t => t.estado === 'En Curso').length;
+
+    // PAUSADAS: Las que se empezaron pero se frenaron (Nuevo contador si querés, o restarlas de Proceso)
+    const rutinasPausadas = tareasPendientesHoy.filter(t => t.estado === 'Pausada').length;
+    // ATRASADAS: No están terminadas Y ya pasó la hora Y no se han iniciado/pausado
+    const rutinasAtrasadas = tareasPendientesHoy.filter(t => {
+        const tiempoTarea = obtenerTiempo(t.proxima_ejecucion);
+        const ahora = new Date().getTime();
+
+        return tiempoTarea < ahora &&
+           t.estado !== 'Pausada' &&
+           t.estado !== 'En Curso';
+    }).length;
+
+    // PRÓXIMAS: No están terminadas, no están pausadas Y falta para que venzan
+    const rutinasProximas = tareasPendientesHoy.filter(t => {
+    return t.proxima_ejecucion && 
+           new Date(t.proxima_ejecucion) >= hoy && 
+           t.estado !== 'Pausada' && 
+           t.estado !== 'En Curso';
+    }).length;
+
+    const handleVerHistorial = async (idTarea) => {
+        try {
+            const response = await fetch(`${URL_API}/tareas/historial/${idTarea}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                setHistorialSeleccionado(data);
+                setMostrarModalHistorial(true);
+            } else {
+                console.error("Error al obtener el historial de la tarea");
+            }
+        } catch (error) {
+            console.error("Error de red:", error);
+        }
+    };
+  // ==========================================
+  // 11. RENDERIZADO DEL COMPONENTE (UI)
   // ==========================================
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
@@ -764,7 +919,6 @@ export default function Main({ cambiarVista, usuario }) {
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.COORDINADOR_GRAL) && (
               <DashboardAgustin tickets={tickets}/>
         )}
-        {console.log(tickets)}
         {(parseInt(rolUsuario) === ROLES.ADMIN ) && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
@@ -1031,7 +1185,15 @@ export default function Main({ cambiarVista, usuario }) {
                         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
                         <td>
                           {ticket.tipo_origen === 'Externo' ? (
-                            <span className="fw-bold" style={{ color: '#6f42c1' }}>🏢 {ticket.cliente || 'Sin cliente'}</span>
+                            <>
+                              <span className="fw-bold" style={{ color: '#6f42c1' }}>
+                                🏢 {ticket.cliente || 'Sin cliente'}
+                              </span>
+                              <br/>
+                              <small className="text-muted">
+                                👤 {ticket.solicitante || 'Usuario'}
+                              </small>
+                            </>
                           ) : (
                             <span>👤 {ticket.solicitante || 'Usuario'}</span>
                           )}
@@ -1182,58 +1344,110 @@ export default function Main({ cambiarVista, usuario }) {
               </div>
 
             <div className="row mt-4 mb-4">
-              <div className="col-md-3 col-6 mb-3">
-                <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
-                  <div className="card-body py-3">
-                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Pendientes Totales</h6>
-                    <h3 className="mb-0 fw-bold">{totalPendientes}</h3>
+              {/* CONTADORES DE TAREAS */}
+              <div className="row mb-4 text-center">
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-secondary text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>TOTAL</h6>
+                              <h3 className="mb-0 fw-bold">{tareasTotales}</h3>
+                          </div>
+                      </div>
                   </div>
-                </div>
-              </div>
-              <div className="col-md-3 col-6 mb-3">
-                <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
-                  <div className="card-body py-3">
-                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Curso</h6>
-                    <h3 className="mb-0 fw-bold">{rutinasEnProceso}</h3>
+                  
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-primary text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>EN CURSO</h6>
+                              <h3 className="mb-0 fw-bold">{rutinasEnProceso}</h3>
+                          </div>
+                      </div>
                   </div>
-                </div>
-              </div>
-              <div className="col-md-3 col-6 mb-3">
-                <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
-                  <div className="card-body py-3">
-                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Atrasadas</h6>
-                    <h3 className="mb-0 fw-bold animate__animated animate__pulse animate__infinite">{rutinasAtrasadas}</h3>
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-primary text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PAUSADAS</h6>
+                              <h3 className="mb-0 fw-bold">{rutinasPausadas}</h3>
+                          </div>
+                      </div>
                   </div>
-                </div>
-              </div>
-              <div className="col-md-3 col-6 mb-3">
-                <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
-                  <div className="card-body py-3">
-                    <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Finalizadas Hoy</h6>
-                    <h3 className="mb-0 fw-bold">{rutinasFinalizadas}</h3>
+                  
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-danger text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>ATRASADAS</h6>
+                              <h3 className="mb-0 fw-bold">{rutinasAtrasadas}</h3>
+                          </div>
+                      </div>
                   </div>
-                </div>
+                  
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-info text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PRÓXIMAS</h6>
+                              <h3 className="mb-0 fw-bold">{rutinasProximas}</h3>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="col-md col-6 mb-2">
+                      <div className="card bg-success text-white shadow-sm h-100">
+                          <div className="card-body py-2">
+                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>FINALIZADAS</h6>
+                              <h3 className="mb-0 fw-bold">{rutinasFinalizadas}</h3>
+                          </div>
+                      </div>
+                  </div>
               </div>
-            </div>
-            <div className="card shadow-sm border-0">
-              {/* NUEVO: Filtros y Buscador de Tareas */}
-            <div className="d-flex flex-wrap gap-2 mt-4 mb-3">
-              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoriaTarea('Todas')}>Todas</button>
-              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Limpieza / General' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoriaTarea('Limpieza / General')}>🧹 Limpieza</button>
-              <button className={`btn btn-sm ${filtroCategoriaTarea === 'CCTV y Servidores' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoriaTarea('CCTV y Servidores')}>📹 CCTV y Servidores</button>
-              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Redes' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoriaTarea('Redes')}>🌐 Redes</button>
-              <button className={`btn btn-sm ${filtroCategoriaTarea === 'Reportes' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoriaTarea('Reportes')}>📑 Reportes</button>
             </div>
 
-            <div className="mb-3">
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="🔍 Buscar rutina por nombre o descripción..." 
-                value={busquedaTarea} 
-                onChange={(e) => setBusquedaTarea(e.target.value)} 
-              />
+            
+            <div className="card shadow-sm border-0 mb-3">
+              {/* NUEVO: Filtros y Buscador de Tareas */}
+            <div className="card shadow-sm border-0 mb-3">
+              <div className="card-body p-3">
+                {/* Fila Superior: Botones de Categoría */}
+                <div className="d-flex flex-wrap gap-2 mb-3">
+                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoriaTarea('Todas')}>Todas</button>
+                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Limpieza / General' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoriaTarea('Limpieza / General')}>🧹 Limpieza</button>
+                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'CCTV y Servidores' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoriaTarea('CCTV y Servidores')}>📹 CCTV y Servidores</button>
+                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Redes' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoriaTarea('Redes')}>🌐 Redes</button>
+                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Reportes' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoriaTarea('Reportes')}>📑 Reportes</button>
+                </div>
+
+                {/* Fila Inferior: Buscador y Selectores */}
+                <div className="row g-2">
+                  <div className="col-md-6">
+                  
+                  {/* Grupo de Buscador y Ordenado */}
+                    <div className="d-flex gap-2 w-100 w-md-auto">
+                      <div className="input-group input-group-sm shadow-sm" style={{ maxWidth: '250px' }}>
+                          <span className="input-group-text bg-white border-end-0">🔍</span>
+                          <input 
+                              type="text" 
+                              className="form-control border-start-0" 
+                              placeholder="Buscar rutina..." 
+                              value={busquedaTarea}
+                              onChange={(e) => setBusquedaTarea(e.target.value)}
+                          />
+                      </div>
+                      
+                      <select 
+                          className="form-select form-select-sm border-info shadow-sm w-auto"
+                          value={ordenTareas}
+                          onChange={(e) => setOrdenTareas(e.target.value)}
+                      >
+                          <option value="proxima">📅 Próxima Ejecución</option>
+                          <option value="atrasadas">⚠️ Atrasadas Primero</option>
+                          <option value="nombre">🔤 Nombre (A-Z)</option>
+                          <option value="categoria">📁 Por Categoría</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+            
               <div className="card-body p-0 table-responsive">
                 <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
                   <thead className="table-light">
@@ -1250,16 +1464,17 @@ export default function Main({ cambiarVista, usuario }) {
                         // Verificamos si la tarea ya se completó hoy
                         const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
                         const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
+                        
+                        // 👇 1. AGREGAMOS ESTA VARIABLE ACÁ 👇
+                        const estaTerminada = tarea.estado === 'Finalizada' || completadaHoy;
 
                         let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
-                        
+
                         // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
                         if (tarea.estado === 'En Curso' && tarea.fecha_inicio_real) {
-                            // new Date() se actualiza gracias al "ticker" del Paso 1
                             const milisegundosPasados = new Date() - new Date(tarea.fecha_inicio_real);
                             const minutosExtra = milisegundosPasados / 1000 / 60;
-                            
-                            // Evitamos que muestre números negativos si hay un micro-desfase de servidor
+
                             if (minutosExtra > 0) {
                                 minutosMostrados += minutosExtra;
                             }
@@ -1268,7 +1483,7 @@ export default function Main({ cambiarVista, usuario }) {
                           <tr 
                             key={tarea.id} 
                             // Si está completada, le bajamos la opacidad al 50% para el efecto difuminado
-                            style={{ opacity: completadaHoy ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
+                            style={{ opacity: estaTerminada ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
                           >
                             {/* Tachamos el título si ya está lista */}
                             <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
@@ -1315,7 +1530,13 @@ export default function Main({ cambiarVista, usuario }) {
                               <div className="d-flex flex-column align-items-center gap-1">
 
                                 <div className="d-flex align-items-center justify-content-center gap-2">
-                                  
+                                  <button 
+                                    className="btn btn-sm btn-outline-info" 
+                                    onClick={() => handleVerHistorial(tarea.id)}
+                                    title="Ver Historial"
+                                  >
+                                    🕒
+                                  </button>
                                   {completadaHoy ? (
                                     <>
                                       <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
@@ -1420,10 +1641,17 @@ export default function Main({ cambiarVista, usuario }) {
           <ModalHistorico 
               tickets={tickets} // Le pasás tu lista completa de tickets cruda
               cerrarModal={() => setMostrarModalHistorico(false)} 
+              areasDisponibles={areasDisponibles}
           />
       )}
+      {mostrarModalHistorial && (
+                <ModalHistoricoTareas 
+                    historial={historialSeleccionado} 
+                    cerrarModal={() => setMostrarModalHistorial(false)} 
+                    URL_API={URL_API}
+                />
+            )}
       </main>
-
       {/* BLOQUE DE MODALES EXTERNOS */}
       <ModalTicket 
         mostrarModal={mostrarModal} setMostrarModal={setMostrarModal}
@@ -1436,6 +1664,7 @@ export default function Main({ cambiarVista, usuario }) {
         enviarComentario={enviarComentario} rolUsuario={rolUsuario}
         finalDelChatRef={finalDelChatRef}
         usuarioLogueado={usuario}
+        listaUsuarios={usuariosLista}
       />
       <ModalUsuarios 
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}
