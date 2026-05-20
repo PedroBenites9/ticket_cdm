@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
+import { ROLES } from '../utils/constants.js';
 export const ModalUsuarios = ({ 
     mostrarModalUsuarios, setMostrarModalUsuarios, 
     rolUsuario, usuariosLista, areasDisponibles, listaRoles, cerrarModal, URL_API
@@ -71,7 +72,7 @@ export const ModalUsuarios = ({
     
 
     // Si no debe mostrarse o no es admin, no renderiza nada
-    if (!mostrarModalUsuarios || rolUsuario !== 'admin') return null;
+    if (!mostrarModalUsuarios || parseInt(rolUsuario) !== ROLES.ADMIN) return null;
 
     return (
         <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>

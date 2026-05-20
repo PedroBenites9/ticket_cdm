@@ -224,14 +224,38 @@ const iniciarTarea = async (id) => {
     return `Faltan ${horas}h ${minutos}m`;
   };
 
-  const fueCompletadaHoy = (fechaString) => {
-    if (!fechaString) return false;
-    const fechaCompletada = new Date(fechaString);
-    const hoy = new Date();
-    return fechaCompletada.getDate() === hoy.getDate() &&
-           fechaCompletada.getMonth() === hoy.getMonth() &&
-           fechaCompletada.getFullYear() === hoy.getFullYear();
-  };
+// 1. Ponemos el helper acá adentro
+    const obtenerTiempo = (fechaStr) => {
+        if (!fechaStr) return Infinity;
+        if (fechaStr.includes('-')) return new Date(fechaStr).getTime();
+        
+        const parts = fechaStr.split(/[\/\s:]/);
+        if (parts.length >= 3) {
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const y = parseInt(parts[2], 10);
+            const hh = parts[3] ? parseInt(parts[3], 10) : 0;
+            const mm = parts[4] ? parseInt(parts[4], 10) : 0;
+            return new Date(y, m, d, hh, mm).getTime();
+        }
+        const ms = new Date(fechaStr).getTime();
+        return isNaN(ms) ? Infinity : ms;
+    };
+
+    // 2. Actualizamos tu función para que use el helper
+    const fueCompletadaHoy = (fechaString) => {
+        if (!fechaString) return false;
+        
+        const tiempo = obtenerTiempo(fechaString);
+        if (tiempo === Infinity) return false;
+
+        const fechaCompletada = new Date(tiempo);
+        const hoy = new Date();
+        
+        return fechaCompletada.getDate() === hoy.getDate() &&
+               fechaCompletada.getMonth() === hoy.getMonth() &&
+               fechaCompletada.getFullYear() === hoy.getFullYear();
+    };
 
   const formatearFrecuenciaTexto = (tarea) => {
     // Si eligieron días específicos, traducimos los números a texto

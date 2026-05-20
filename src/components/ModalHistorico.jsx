@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const ModalHistorico = ({ tickets, cerrarModal }) => {
+export const ModalHistorico = ({ tickets, cerrarModal, areasDisponibles }) => {
     // Estados locales, ¡solo existen dentro del modal!
     const [filtroFechaHist, setFiltroFechaHist] = useState('');
     const [filtroAreaHist, setFiltroAreaHist] = useState('');
@@ -91,8 +91,7 @@ export const ModalHistorico = ({ tickets, cerrarModal }) => {
                                             <tr key={ticket.id}>
                                                 <td className="fw-bold">{ticket.codigo}</td>
                                                 <td>{ticket.asunto}</td>
-                                                <td>{ticket.area_origen || 'N/A'}</td>
-                                                {console.log(ticket)}
+                                                <td>{areasDisponibles.find(area => area.id == ticket.id_area)?.nombre || 'Sin Área'}</td>
                                                 <td>{formatearFecha(ticket.fecha_finalizado) || 'Sin fecha'}</td>
                                                 <td>{ticket.tecnico_asignado || 'N/A'}</td>
                                             </tr>

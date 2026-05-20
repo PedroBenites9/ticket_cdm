@@ -5,9 +5,13 @@ const ModalTicket = ({
   formulario, manejarCambio, setFormulario, esSoloLectura,
   guardarTicket, ingresandoNuevoCliente, setIngresandoNuevoCliente,
   clientesLista, comentarios, nuevoComentario, setNuevoComentario,
-  enviarComentario, rolUsuario, finalDelChatRef,descripcion, usuarioLogueado
+  enviarComentario, rolUsuario, finalDelChatRef, descripcion, usuarioLogueado,
+  listaUsuarios // ⚠️ IMPORTANTE: Agregamos este nuevo prop para recibir los usuarios
 }) => {
   if (!mostrarModal) return null;
+
+  const miRol = parseInt(localStorage.getItem('rol_usuario'));
+  const esAdmin = miRol === 1;
 
   return (
     <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -21,21 +25,55 @@ const ModalTicket = ({
           </div>
           <div className="modal-body">
             <form id="formTicket" onSubmit={guardarTicket}>
+              
               <div className="mb-3">
                 <label className="form-label fw-bold">Asunto breve (Ej: PC sin internet)</label>
-                <input type="text" className="form-control" name="asunto" value={formulario.asunto} onChange={manejarCambio} required disabled={esSoloLectura} />
+                <input type="text" className="form-control" name="asunto" value={formulario.asunto || ''} onChange={manejarCambio} required disabled={esSoloLectura} />
               </div>
+
+              <div className="mb-3">
+                <label className="form-label fw-bold">Solicitante</label>
+                {esAdmin ? (
+                  <select
+                    className="form-select border-info shadow-sm"
+                    name="solicitante"
+                    value={formulario.solicitante || ''}
+                    onChange={(e)=>{
+                      manejarCambio(e);
+                    }}
+                    required
+                    disabled={esSoloLectura}
+                  >
+                    <option value="">Seleccione un usuario...</option>
+                    {/* Renderizamos la lista de usuarios. El '?' evita errores si la lista demora en cargar */}
+                    {listaUsuarios?.map(user => (
+                      <option key={user.id} value={user.nombre}>
+                        {user.nombre}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="form-control bg-light"
+                    value={formulario.solicitante || ''}
+                    disabled
+                  />
+                )}
+              </div>
+              {/* 👆 FIN NUEVO BLOQUE 👆 */}
+
               <div className="row">
                 <div className="col-md-4 mb-3">
                   <label className="form-label fw-bold">Origen / Cliente</label>
-                  <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen} onChange={manejarCambio} required disabled={esSoloLectura}>
+                  <select className="form-select border-primary" name="tipo_origen" value={formulario.tipo_origen || ''} onChange={manejarCambio} required disabled={esSoloLectura}>
                     <option value="Interno">🏢 Personal Interno</option>
                     <option value="Externo">🤝 Cliente Externo</option>
                   </select>
                 </div>
                 <div className="col-md-5 mb-3">
                   <label className="form-label fw-bold">Categoría IT</label>
-                  <select className="form-select" name="categoria" value={formulario.categoria} onChange={manejarCambio} required disabled={esSoloLectura}>
+                  <select className="form-select" name="categoria" value={formulario.categoria || ''} onChange={manejarCambio} required disabled={esSoloLectura}>
                     <option value="" disabled>Seleccione...</option>
                     <option value="Redes e Internet">🌐 Redes e Internet</option>
                     <option value="Active Directory / Accesos">🔑 Active Directory / Accesos</option>
@@ -49,7 +87,7 @@ const ModalTicket = ({
                 </div>
                 <div className="col-md-3 mb-3">
                   <label className="form-label fw-bold">Prioridad</label>
-                  <select className="form-select" name="prioridad" value={formulario.prioridad} onChange={manejarCambio} disabled={esSoloLectura}>
+                  <select className="form-select" name="prioridad" value={formulario.prioridad || ''} onChange={manejarCambio} disabled={esSoloLectura}>
                     <option value="Baja">Baja</option>
                     <option value="Media">Media</option>
                     <option value="Alta">Alta</option>
@@ -57,6 +95,7 @@ const ModalTicket = ({
                   </select>
                 </div>
               </div>
+              
               {formulario.tipo_origen === 'Externo' && (
                 <div className="col-md-12 mb-3 animate__animated animate__fadeIn">
                   <label className="form-label fw-bold text-purple">🏢 Seleccione el Cliente / Servicio</label>
@@ -98,11 +137,14 @@ const ModalTicket = ({
                   )}
                 </div>
               )}
+              
               <div className="mb-3">
                 <label className="form-label fw-bold">Descripción detallada</label>
-               <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion} onChange={manejarCambio} required disabled={editandoId && (usuarioLogueado !== formulario.solicitante)}></textarea>
+                <textarea className="form-control" rows="3" name="descripcion" value={formulario.descripcion || ''} onChange={manejarCambio} required disabled={editandoId && (usuarioLogueado !== formulario.solicitante)}></textarea>
               </div>
             </form>
+
+            {/* BITÁCORA */}
             {editandoId && (
               <div className="mt-4 pt-4 border-top">
                 <h6 className="fw-bold text-secondary mb-3">💬 Bitácora de Soporte</h6>
@@ -129,8 +171,7 @@ const ModalTicket = ({
               </div>
             )}
           </div>
-         <div className="modal-footer bg-light">
-              {/* El botón siempre se dibuja, pero se deshabilita si es de solo lectura */}
+          <div className="modal-footer bg-light">
               <button type="submit" form="formTicket" className="btn btn-success" disabled={esSoloLectura}>
                   {editandoId ? "Guardar Cambios" : "Generar Nuevo Ticket"}
               </button>
