@@ -23,15 +23,15 @@ export default function ModalHistoricoTareas({ historial, cerrarModal, URL_API }
             return coincideTexto && coincideUsuario;
         });
     }, [historial, busqueda, filtroUsuario]);
-
+    
     // Función para manejar la descarga del archivo
-    const manejarDescarga = (rutaFisica, URL_API) => {
+    const manejarDescarga = (rutaFisica) => {
         if (!rutaFisica) return;
 
         // 1. Extraemos SOLO el nombre del archivo
         const nombreArchivo = rutaFisica.split(/[\/\\]/).pop();
 
-        // 2. Armamos la URL que coincide EXACTAMENTE con el app.use() de tu index.js
+        // 2. Armamos la URL usando el URL_API que ya viene de las props del componente
         const urlDescarga = `${URL_API}/tareas/archivo/${nombreArchivo}`;
 
         // 3. Abrimos la imagen o PDF en una pestaña nueva

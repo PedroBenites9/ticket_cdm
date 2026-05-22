@@ -68,7 +68,7 @@ export default function Main({ cambiarVista, usuario }) {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, 
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, archivosTicketNuevo, setArchivosTicketNuevo
   } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
  
   // ==========================================
@@ -882,6 +882,9 @@ export default function Main({ cambiarVista, usuario }) {
 
         {parseInt(rolUsuario) === ROLES.ADMIN && (
           <div className="row mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h3 className="text-secondary m-0">📊 Dashboard de Tickets (Administrador)</h3>
+            </div>
             <div className="col-md-3 col-6 mb-3">
               <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
                 <div className="card-body py-3">
@@ -916,13 +919,33 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
           </div>
         )}
+        
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.COORDINADOR_GRAL) && (
-              <DashboardAgustin tickets={tickets}/>
-        )}
+          <>
+              <DashboardAgustin 
+              tickets={tickets} 
+              tareas={tareas}
+              obtenerTiempo={obtenerTiempo}
+              fueCompletadaHoy={fueCompletadaHoy}
+              usuarioLogueado={usuario}
+              indicadoresTareas={{
+                atrasadas: rutinasAtrasadas,
+                proceso: rutinasEnProceso,
+                pausa: rutinasPausadas,
+                proximas: rutinasProximas,
+                finalizadas: rutinasFinalizadas
+              }}
+              />
+              
+          </>
+           
+           )}
+           
         {(parseInt(rolUsuario) === ROLES.ADMIN ) && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
+                
                 <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
                 <div style={{ height: '250px' }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -1665,7 +1688,11 @@ export default function Main({ cambiarVista, usuario }) {
         enviarComentario={enviarComentario} rolUsuario={rolUsuario}
         finalDelChatRef={finalDelChatRef}
         usuarioLogueado={usuario}
+        listaRoles={listaRoles}
         listaUsuarios={usuariosLista}
+        archivosTicketNuevo={archivosTicketNuevo} 
+        setArchivosTicketNuevo={setArchivosTicketNuevo}
+        URL_API={URL_API}
       />
       <ModalUsuarios 
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   // ESTADOS
   const [tickets, setTickets] = useState([]);
+  
   const [cargando, setCargando] = useState(true);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
@@ -13,6 +14,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const [formulario, setFormulario] = useState({
     asunto: '', categoria: '', prioridad: 'Media', descripcion: '', tipo_origen: 'Interno', cliente:'', 
   });
+  const [archivosTicketNuevo, setArchivosTicketNuevo] = useState([]);
   // REFERENCIAS
   const editandoIdRef = useRef(null);
   const finalDelChatRef = useRef(null);
@@ -80,7 +82,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto, categoria: ticket.categoria, prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen, solicitante: ticket.solicitante || 'Interno', cliente: ticket.cliente || ''
+      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen, solicitante: ticket.solicitante || 'Interno', cliente: ticket.cliente || '',archivo_adjunto: ticket.archivo_adjunto
     });
     setEditandoId(ticket.id);
     cargarComentarios(ticket.id);
@@ -110,38 +112,67 @@ const guardarTicket = async (e) => {
     e.preventDefault();
     mostrarCarga();
     try {
-      const nombreReal = usuario || localStorage.getItem('nombre_usuario');
-      const areaReal = localStorage.getItem('area_usuario'); 
+        const nombreReal = usuario || localStorage.getItem('nombre_usuario');
+        const areaReal = localStorage.getItem('area_usuario');
 
-      const paqueteAEnviar = { 
-        ...formulario, 
-        solicitante: formulario.solicitante || nombreReal,
-        usuario_actual: nombreReal // Necesario para que el backend valide edición de descripción
-      };
+        const paqueteAEnviar = {
+            ...formulario,
+            solicitante: formulario.solicitante || nombreReal,
+            usuario_actual: nombreReal 
+        };
 
-      const url = editandoId ? `${URL_API}/tickets/editar/${editandoId}` : `${URL_API}/tickets`;
-      const método = editandoId ? 'PUT' : 'POST';
+        let respuesta;
 
-      const respuesta = await fetch(url, {
-        method: método,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paqueteAEnviar)
-      });
+        // CAMINO 1: CREAR TICKET NUEVO (Usa FormData para enviar el archivo)
+        if (!editandoId) {
+            const formData = new FormData();
+            
+            Object.keys(paqueteAEnviar).forEach(key => {
+                if (paqueteAEnviar[key] !== null && paqueteAEnviar[key] !== undefined) {
+                    formData.append(key, paqueteAEnviar[key]);
+                }
+            });
 
-      if (!respuesta.ok) throw new Error("Error en el servidor");
-      
-      setMostrarModal(false);
-      setEditandoId(null); 
-      toast.success(editandoId ? "¡Ticket actualizado!" : "¡Ticket generado!");
+            if (archivosTicketNuevo && archivosTicketNuevo.length > 0) {
+                archivosTicketNuevo.forEach(archivo => {
+                    formData.append('archivos', archivo); 
+                });
+            }
+
+            respuesta = await fetch(`${URL_API}/tickets`, {
+                method: 'POST',
+                body: formData
+            });
+        }
+        // CAMINO 2: EDITAR TICKET EXISTENTE (Se mantiene igual con JSON)
+        else {
+            respuesta = await fetch(`${URL_API}/tickets/editar/${editandoId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(paqueteAEnviar)
+            });
+        }
+
+        if (!respuesta.ok) throw new Error("Error en el servidor");
+
+        // Limpiamos los modales y estados
+        setMostrarModal(false);
+        setEditandoId(null);
+        
+        // limpiamos el archivo adjunto que quedó en memoria
+        if (!editandoId) {
+            setArchivosTicketNuevo([]);
+        }
+
+        toast.success(editandoId ? "¡Ticket actualizado!" : "¡Ticket generado!");
 
     } catch (error) {
-      console.error(error);
-      toast.error("Hubo un problema al procesar el ticket.");
+        console.error(error);
+        toast.error("Hubo un problema al procesar el ticket.");
     } finally {
-      ocultarCarga();
+        ocultarCarga();
     }
-    
-  };
+};
   const cambiarEstadoTicket = async (idTabla, nuevoEstado) => {
     try {
       const respuesta = await fetch(`${URL_API}/tickets/${idTabla}/estado`, {
@@ -198,6 +229,6 @@ const guardarTicket = async (e) => {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, 
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, archivosTicketNuevo, setArchivosTicketNuevo
   };
 };

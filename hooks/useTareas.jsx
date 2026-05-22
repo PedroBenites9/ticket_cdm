@@ -93,6 +93,13 @@ const manejarDias = (dia) => {
       if (!respuesta.ok) throw new Error("El servidor falló al completar la tarea");
       
       const tareaActualizada = await respuesta.json();
+
+      if (tareaActualizada.eliminada) {
+        setTareas(prev => prev.filter(t => t.id !== id));
+        toast.success("¡Excelente! Tarea de Fecha Única completada y archivada.");
+        return;   
+      }
+
       setTareas(prev => {
         const nuevasTareas = prev.map(t => t.id === id ? tareaActualizada : t);
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
