@@ -93,6 +93,13 @@ const manejarDias = (dia) => {
       if (!respuesta.ok) throw new Error("El servidor falló al completar la tarea");
       
       const tareaActualizada = await respuesta.json();
+
+      if (tareaActualizada.eliminada) {
+        setTareas(prev => prev.filter(t => t.id !== id));
+        toast.success("¡Excelente! Tarea de Fecha Única completada y archivada.");
+        return;   
+      }
+
       setTareas(prev => {
         const nuevasTareas = prev.map(t => t.id === id ? tareaActualizada : t);
         return nuevasTareas.sort((a, b) => new Date(a.proxima_ejecucion) - new Date(b.proxima_ejecucion));
@@ -178,34 +185,142 @@ const iniciarTarea = async (id) => {
       }
     }
   };
+  
+const exportarHistorialTareas = async (fechaInicio, fechaFin) => {
+    // Si no recibe fechas del Dropdown, asume que es el historial completo
+    const exportarTodo = !fechaInicio || !fechaFin;
+    const toastId = toast.loading(exportarTodo ? "Recopilando todas las rutinas..." : "Filtrando tareas por fecha...");
 
-  const exportarHistorialTareas = async () => {
+    const obtenerFrecuenciaDetallada = (tareaObj) => {
+      if (!tareaObj) return "Desconocida";
+      
+      if (tareaObj.frecuencia === 'Dias Especificos') {
+        let dias = [];
+        try { 
+          dias = typeof tareaObj.dias_especificos === 'string' 
+            ? JSON.parse(tareaObj.dias_especificos) 
+            : (tareaObj.dias_especificos || []); 
+        } catch(e){}
+        const mapaDias = {1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábados', 0: 'Domingos'};
+        const nombresDias = dias.map(d => mapaDias[d]).join(', ');
+        return `Todos los ${nombresDias}`;
+      }
+      
+      if (tareaObj.frecuencia === 'Fecha Unica') {
+        if (!tareaObj.fecha_unica) return "Fecha Única";
+        const f = new Date(tareaObj.fecha_unica + 'T00:00:00');
+        return `Única fecha: el ${f.toLocaleDateString('es-AR')}`;
+      }
+      if (tareaObj.frecuencia === 'Mensual') return 'Cada 1° de cada mes';
+
+      return tareaObj.frecuencia || 'Sin frecuencia';
+    };
+
     try {
+      // 1. Preparamos el rango de fechas (desde las 00:00 hasta las 23:59)
+      let desde, hasta;
+      if (!exportarTodo) {
+        desde = new Date(fechaInicio);
+        desde.setHours(0, 0, 0, 0);
+        hasta = new Date(fechaFin);
+        hasta.setHours(23, 59, 59, 999);
+      }
+
+      // 2. Obtenemos el historial de la base de datos (Las Finalizadas)
       const respuesta = await fetch(`${URL_API}/tareas/historial`);
       const datosHistorial = await respuesta.json();
-      if (datosHistorial.length === 0) {
-        toast.error("Aún no hay tareas completadas para exportar.");
+
+      // 3. Mapeamos y FILTRAMOS las Finalizadas
+      const finalizadasExcel = datosHistorial
+        .filter(registro => {
+          if (exportarTodo) return true; // Pasan todas si no hay filtro
+          
+          // Reemplazamos espacio por 'T' para evitar errores de Date en navegadores
+          const fechaSegura = registro.fecha_completada ? registro.fecha_completada.replace(' ', 'T') : null;
+          if (!fechaSegura) return false;
+
+          const fCompletada = new Date(fechaSegura);
+          return fCompletada >= desde && fCompletada <= hasta; 
+        })
+        .map(registro => {
+          const tareaOriginal = tareas.find(t => t.id === registro.tarea_id);
+          const frecuenciaDetallada = tareaOriginal ? obtenerFrecuenciaDetallada(tareaOriginal) : "Histórico (Única vez o Archivada)";
+          return{
+            "ID Tarea": registro.tarea_id,
+            "Rutina a Realizar": registro.titulo_tarea,
+            "Estado": "✅ Finalizada",
+            "Frecuencia": frecuenciaDetallada, 
+            "Fecha Vencimiento": "Completada",
+            "Asignado / Completado Por": registro.usuario_que_completo || 'Sin registro',
+            "Fecha Finalización": new Date(registro.fecha_completada).toLocaleDateString('es-AR'),
+            "Hora Finalización": new Date(registro.fecha_completada).toLocaleTimeString('es-AR').substring(0, 8),
+            "Tiempo Dedicado": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : '0 min',
+            "Comentario": registro.comentario || 'Sin comentario',
+            "Evidencia (Archivo)": registro.archivo_adjunto ? `${URL_API.startsWith('http') ? URL_API : window.location.origin + URL_API}/tareas/archivo/${registro.archivo_adjunto.split(/[\\/]/).pop()}` : 'Sin archivo'
+          }
+        }
+      );  
+      
+
+      // 4. Mapeamos y FILTRAMOS las Activas (Pendientes, Atrasadas, En Curso)
+      const activasExcel = tareas
+        .filter(tarea => {
+          if (exportarTodo) return true;
+          if (!tarea.proxima_ejecucion) return false;
+          
+          const fechaSegura = tarea.proxima_ejecucion.replace(' ', 'T');
+          const fProxima = new Date(fechaSegura);
+          return fProxima >= desde && fProxima <= hasta; // Filtro maestro
+        })
+        .map(tarea => {
+          const fechaProx = new Date(tarea.proxima_ejecucion.replace(' ', 'T'));
+          const estaAtrasada = fechaProx < new Date();
+          
+          let estadoVisual = "⏳ Pendiente / Programada";
+          if (tarea.estado === 'En Curso') estadoVisual = "▶️ En proceso";
+          else if (tarea.estado === 'Pausada') estadoVisual = "⏸️ En pausa";
+          else if (estaAtrasada) estadoVisual = "⚠️ Atrasada (No Cumplida)";
+
+          return {
+            "ID Tarea": tarea.id,
+            "Rutina a Realizar": tarea.titulo,
+            "Estado": estadoVisual,
+            "Frecuencia Exacta": obtenerFrecuenciaDetallada(tarea),
+            "Fecha Vencimiento": `${fechaProx.toLocaleDateString('es-AR')} ${fechaProx.toLocaleTimeString('es-AR').substring(0,5)}`,
+            "Asignado / Completado Por": "N/A (No realizada)",
+            "Fecha Finalización": "Pendiente",
+            "Hora Finalización": "Pendiente",
+            "Tiempo Dedicado": "0 min",
+            "Comentario": "N/A",
+            "Evidencia (Archivo)": "Sin archivo"
+          };
+        });
+
+      // 5. Unimos las dos listas ya filtradas
+      const datosCompletos = [...finalizadasExcel, ...activasExcel];
+
+      if (datosCompletos.length === 0) {
+        toast.error("No se encontraron registros en el rango de fechas seleccionado.", { id: toastId });
         return;
       }
-      const datosParaExcel = datosHistorial.map(registro => ({
-        "ID Tarea": registro.tarea_id,
-        "Rutina Realizada": registro.titulo_tarea,
-        "Completado Por": registro.usuario_que_completo,
-        "Fecha de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleDateString() : 'Sin registro',
-        "Hora de Inicio": registro.fecha_inicio ? new Date(registro.fecha_inicio).toLocaleTimeString() : 'Sin registro',
-        "Fecha de Finalización": new Date(registro.fecha_completada).toLocaleDateString(),
-        "Hora de Finalización": new Date(registro.fecha_completada).toLocaleTimeString(),
-        "Tiempo de Ejecución Real": registro.tiempo_total_minutos ? `${Math.round(registro.tiempo_total_minutos)} min` : 'Sin registro',
-        "Comentario": registro.comentario || 'Sin comentario',
-        "Evidencia (Archivo)": registro.archivo_adjunto ? `${URL_API.startsWith('http') ? URL_API : window.location.origin + URL_API}/tareas/archivo/${registro.archivo_adjunto.split(/[\\/]/).pop()}` : 'Sin archivo'
-      }));  
-      const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
+
+      // 6. Generamos el Excel y le ponemos el nombre dinámico
+      const hoja = XLSX.utils.json_to_sheet(datosCompletos);
       const libro = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(libro, hoja, "Métricas de Rutinas");
-      XLSX.writeFile(libro, "Métricas_Mantenimiento_CruzDeMalta.xlsx");
-      toast.success("¡Reporte de métricas descargado!");
+      XLSX.utils.book_append_sheet(libro, hoja, "Reporte General Rutinas");
+      
+      let nombreArchivo = "Reporte_Historial_Completo.xlsx";
+      if (!exportarTodo) {
+         const fStr = desde.toLocaleDateString('es-AR').replace(/\//g, '-');
+         nombreArchivo = `Reporte_Rutinas_Desde_${fStr}.xlsx`;
+      }
+
+      XLSX.writeFile(libro, nombreArchivo);
+      
+      toast.success("¡Reporte completo descargado!", { id: toastId });
     } catch (error) {
-      toast.error("Error al generar el Excel de tareas.");
+      console.error(error);
+      toast.error("Error al generar el Excel de tareas.", { id: toastId });
     }
   };
 

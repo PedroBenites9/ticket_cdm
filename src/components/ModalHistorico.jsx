@@ -90,8 +90,6 @@ export const ModalHistorico = ({ tickets, cerrarModal, areasDisponibles }) => {
                                         ticketsHistoricos.map(ticket => (
                                             <tr key={ticket.id}>
                                                 <td className="fw-bold">{ticket.codigo}</td>
-                                                {console.log(ticket.id_area)}
-                                                {console.log( tickets )}
                                                 <td>{ticket.asunto}</td>
                                                 <td>{areasDisponibles.find(area => area.id == ticket.id_area)?.nombre || 'Sin Área'}</td>
                                                 <td>{formatearFecha(ticket.fecha_finalizado) || 'Sin fecha'}</td>

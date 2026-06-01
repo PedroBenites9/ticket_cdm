@@ -125,7 +125,6 @@ const ModalTarea = ({
                         </div>
                       )}
                     </div>
-
                   )    
             }
             </form>

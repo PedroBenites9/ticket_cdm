@@ -25,6 +25,7 @@ import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
 import { ModalHistorico } from './ModalHistorico'; 
 import ModalHistoricoTareas from './ModalHistoricoTareas';
+import DropdownReporte from './DropdownReporte';
 
 //Dashboard Agustin
 import { DashboardAgustin } from './ComponenteAgustin';
@@ -52,6 +53,7 @@ export default function Main({ cambiarVista, usuario }) {
   const [busquedaTarea, setBusquedaTarea] = useState('');
   const [mostrarModalFinalizar, setMostrarModalFinalizar] = useState(false);
   const [tareaSeleccionadaFinalizar, setTareaSeleccionadaFinalizar] = useState(null);
+  const [mostrarModalReporteTareas, setMostrarModalReporteTareas] = useState(false);
 
   const {
     tareas, setTareas, mostrarModalTarea, setMostrarModalTarea,
@@ -68,7 +70,7 @@ export default function Main({ cambiarVista, usuario }) {
     ticketsConMensaje, setTicketsConMensaje, formulario, setFormulario,
     editandoIdRef, finalDelChatRef, esSoloLectura, obtenerColorEstado, calcularTiempoRestante,
     manejarCambio, abrirModalCrear, abrirModalEditar, enviarComentario,
-    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, 
+    guardarTicket, cambiarEstadoTicket, asignarmeTicket, eliminarTicket, archivosTicketNuevo, setArchivosTicketNuevo
   } = useTickets(URL_API, usuario, mostrarCarga, ocultarCarga);
  
   // ==========================================
@@ -379,25 +381,31 @@ export default function Main({ cambiarVista, usuario }) {
   // 7. FUNCIONES HANDLERS (MODALES Y DATOS)
   // ==========================================
 
-  const exportarAExcel = () => {
-    const datosParaExcel = ticketsFiltrados.map(ticket => ({
-      "Código": ticket.codigo,
+  const exportarTicketsExcel = () => {
+    if (!tickets || tickets.length === 0) {
+      toast.error("No hay tickets en el sistema para exportar.");
+      return;
+    }
+
+    const datosParaExcel = tickets.map(ticket => ({
+      "Código": ticket.codigo || `TK-${ticket.id}`,
       "Asunto": ticket.asunto,
-      "Origen": ticket.tipo_origen || 'Interno',
-      "Cliente / Solicitante": ticket.tipo_origen === 'Externo' ? (ticket.cliente || 'Sin cliente') : (ticket.solicitante || 'Usuario'),
-      "Categoría": ticket.categoria,
+      "Solicitante": ticket.solicitante,
+      "Origen / Cliente": ticket.tipo_origen === 'Externo' ? (ticket.cliente || 'Externo') : 'Interno',
+      "Categoría IT": ticket.categoria,
       "Prioridad": ticket.prioridad,
-      "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
       "Estado": ticket.estado,
-      "Fecha de Creación": new Date(ticket.fecha_creacion).toLocaleDateString(),
-      "Fecha Finalizado": ticket.fecha_finalizado ? new Date(ticket.fecha_finalizado).toLocaleDateString() : 'Pendiente',
-      "Descripción Detallada": ticket.descripcion
+      "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
+      "Fecha de Creación": ticket.fecha_creacion ? new Date(ticket.fecha_creacion).toLocaleString('es-AR') : 'Sin registro',
+      "Fecha de Finalización": ticket.fecha_finalizado ? new Date(ticket.fecha_finalizado).toLocaleString('es-AR') : 'N/A'
     }));
+
     const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
     const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "Reporte IT");
-    XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
-    toast.success("¡Reporte de Excel descargado con éxito!");
+    XLSX.utils.book_append_sheet(libro, hoja, "Todos los Tickets");
+    XLSX.writeFile(libro, "Reporte_Completo_Tickets_CruzDeMalta.xlsx");
+    
+    toast.success("¡Excel generado con los registros!");
   };
   
   const abrirPanelUsuarios = async () => {
@@ -775,6 +783,24 @@ export default function Main({ cambiarVista, usuario }) {
             console.error("Error de red:", error);
         }
     };
+
+    const handleVerHistorialGlobal = async () => {
+        try {
+            // Llamamos a la ruta sin ID, que nos devuelve TODO el historial
+            const response = await fetch(`${URL_API}/tareas/historial`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                setHistorialSeleccionado(data);
+                setMostrarModalHistorial(true); // Reutilizamos tu mismo modal
+            } else {
+                toast.error("Error al obtener el historial global");
+            }
+        } catch (error) {
+            console.error("Error de red:", error);
+            toast.error("Error de conexión al servidor");
+        }
+    };
   // ==========================================
   // 11. RENDERIZADO DEL COMPONENTE (UI)
   // ==========================================
@@ -867,7 +893,7 @@ export default function Main({ cambiarVista, usuario }) {
           )}
           <div className="d-flex gap-2">
             {parseInt(rolUsuario) === ROLES.ADMIN && (
-              <button className="btn btn-success fw-bold shadow-sm" onClick={exportarAExcel}>
+              <button className="btn btn-success fw-bold shadow-sm" onClick={exportarTicketsExcel}>
                 📊 Descargar Excel
               </button>
             )}
@@ -882,6 +908,9 @@ export default function Main({ cambiarVista, usuario }) {
 
         {parseInt(rolUsuario) === ROLES.ADMIN && (
           <div className="row mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h3 className="text-secondary m-0">📊 Dashboard de Tickets (Administrador)</h3>
+            </div>
             <div className="col-md-3 col-6 mb-3">
               <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
                 <div className="card-body py-3">
@@ -916,13 +945,33 @@ export default function Main({ cambiarVista, usuario }) {
             </div>
           </div>
         )}
+        
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.COORDINADOR_GRAL) && (
-              <DashboardAgustin tickets={tickets}/>
-        )}
+          <>
+              <DashboardAgustin 
+              tickets={tickets} 
+              tareas={tareas}
+              obtenerTiempo={obtenerTiempo}
+              fueCompletadaHoy={fueCompletadaHoy}
+              usuarioLogueado={usuario}
+              indicadoresTareas={{
+                atrasadas: rutinasAtrasadas,
+                proceso: rutinasEnProceso,
+                pausa: rutinasPausadas,
+                proximas: rutinasProximas,
+                finalizadas: rutinasFinalizadas
+              }}
+              />
+              
+          </>
+           
+           )}
+           
         {(parseInt(rolUsuario) === ROLES.ADMIN ) && (
           <div className="row mb-4">
             <div className="col-12 col-md-6 col-lg-3 mb-3">
               <div className="card shadow-sm h-100 border-0 p-3">
+                
                 <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
                 <div style={{ height: '250px' }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -1099,7 +1148,7 @@ export default function Main({ cambiarVista, usuario }) {
                       onClick={() => setMenuAbierto(menuAbierto === 'estado' ? null : 'estado')}
                   >
                       <span className="fw-bold text-secondary small">Estado</span>
-                      {filtros.prioridades.length > 0 && <span className="badge bg-primary">{filtros.prioridades.length}</span>}
+                      {filtros.estados.length > 0 && <span className="badge bg-primary">{filtros.estados.length}</span>}
                       <span style={{ fontSize: '0.8em' }}>▼</span>
                   </button>
                   
@@ -1331,9 +1380,14 @@ export default function Main({ cambiarVista, usuario }) {
               
               <div className="d-flex gap-2">
                 {parseInt(rolUsuario) === ROLES.ADMIN && (
-                  <button className="btn btn-success fw-bold shadow-sm" onClick={exportarHistorialTareas}>
-                    📊 Descargar Historial
-                  </button>
+                  <>
+                    {parseInt(rolUsuario) === ROLES.ADMIN && (
+                      <DropdownReporte exportarHistorialTareas={exportarHistorialTareas} />
+                    )}  
+                    <button className="btn btn-secondary fw-bold shadow-sm" onClick={handleVerHistorialGlobal}>
+                      🗄️ Ver Historial Global
+                    </button>
+                  </>
                 )}
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
                   setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
@@ -1364,7 +1418,7 @@ export default function Main({ cambiarVista, usuario }) {
                       </div>
                   </div>
                   <div className="col-md col-6 mb-2">
-                      <div className="card bg-primary text-white shadow-sm h-100">
+                      <div className="card bg-warning text-white shadow-sm h-100">
                           <div className="card-body py-2">
                               <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PAUSADAS</h6>
                               <h3 className="mb-0 fw-bold">{rutinasPausadas}</h3>
@@ -1465,7 +1519,6 @@ export default function Main({ cambiarVista, usuario }) {
                         const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
                         const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
                         
-                        // 👇 1. AGREGAMOS ESTA VARIABLE ACÁ 👇
                         const estaTerminada = tarea.estado === 'Finalizada' || completadaHoy;
 
                         let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
@@ -1484,6 +1537,8 @@ export default function Main({ cambiarVista, usuario }) {
                             key={tarea.id} 
                             // Si está completada, le bajamos la opacidad al 50% para el efecto difuminado
                             style={{ opacity: estaTerminada ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
+                            onClick={() => marcarComoVista(tarea.id)}
+
                           >
                             {/* Tachamos el título si ya está lista */}
                             <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
@@ -1664,7 +1719,11 @@ export default function Main({ cambiarVista, usuario }) {
         enviarComentario={enviarComentario} rolUsuario={rolUsuario}
         finalDelChatRef={finalDelChatRef}
         usuarioLogueado={usuario}
+        listaRoles={listaRoles}
         listaUsuarios={usuariosLista}
+        archivosTicketNuevo={archivosTicketNuevo} 
+        setArchivosTicketNuevo={setArchivosTicketNuevo}
+        URL_API={URL_API}
       />
       <ModalUsuarios 
         mostrarModalUsuarios={mostrarModalUsuarios} setMostrarModalUsuarios={setMostrarModalUsuarios}
@@ -1686,6 +1745,9 @@ export default function Main({ cambiarVista, usuario }) {
         setMostrar={setMostrarModalFinalizar}
         tarea={tareaSeleccionadaFinalizar}
         marcarTareaCompletada={marcarTareaCompletada}
+        usuariosLista={usuariosLista}
+        rolUsuario={rolUsuario}
+        usuarioLogueado={usuario}
       />
     </motion.div>
   );

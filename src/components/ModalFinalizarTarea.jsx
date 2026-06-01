@@ -1,15 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ModalFinalizarTarea = ({ 
   mostrar, 
   setMostrar, 
   tarea, 
-  marcarTareaCompletada 
+  marcarTareaCompletada ,
+  usuariosLista,   
+  rolUsuario,      
+  usuarioLogueado
 }) => {
   const [comentario, setComentario] = useState('');
   const [archivo, setArchivo] = useState(null);
   const [enviando, setEnviando] = useState(false);
+
+  const [tecnicoRealizador, setTecnicoRealizador] = useState('');
+
+  useEffect(() => {
+    if (mostrar) {
+        setTecnicoRealizador(usuarioLogueado);
+        setComentario('');
+        setArchivo(null);
+    }
+  }, [mostrar, usuarioLogueado]);
 
   if (!tarea) return null;
 
@@ -36,7 +49,7 @@ const ModalFinalizarTarea = ({
     }
   };
 
-  return (
+ return (
     <AnimatePresence>
       {mostrar && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1060 }}>
@@ -55,6 +68,26 @@ const ModalFinalizarTarea = ({
                 <div className="modal-body">
                   <div className="mb-3">
                     <p className="text-secondary small mb-2">Estás por completar: <strong className="text-dark">{tarea.titulo}</strong></p>
+                  </div>
+
+                  {/* 👇 SELECTOR DE TÉCNICO (Solo visible para Admin - Rol 1) 👇 */}
+                  {parseInt(rolUsuario) === 1 && (
+                      <div className="mb-3">
+                          <label className="form-label fw-bold small text-muted">¿Quién lo realizó?</label>
+                          <select 
+                              className="form-select border-primary shadow-sm"
+                              value={tecnicoRealizador}
+                              onChange={(e) => setTecnicoRealizador(e.target.value)}
+                              required
+                          >
+                              {usuariosLista?.map(u => (
+                                  <option key={u.id} value={u.nombre}>{u.nombre}</option>
+                              ))}
+                          </select>
+                      </div>
+                  )}
+
+                  <div className="mb-3">
                     <label className="form-label fw-bold small text-muted">¿Qué se realizó? (Opcional)</label>
                     <textarea 
                       className="form-control" 
