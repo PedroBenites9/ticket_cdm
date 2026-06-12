@@ -10,11 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "bootstrap": "^5.3.8",
     "framer-motion": "^12.34.4",
     "nodemailer": "^8.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-quill-new": "^3.8.3",
     "recharts": "^3.7.0",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",

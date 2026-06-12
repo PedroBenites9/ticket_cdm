@@ -25,13 +25,24 @@ import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
 import { ModalHistorico } from './ModalHistorico'; 
 import ModalHistoricoTareas from './ModalHistoricoTareas';
+import ModalHistorialTarea from './ModalHistorialTarea'; // 👈 Nuevo modal
 import DropdownReporte from './DropdownReporte';
+import TableroTareas from './TableroTarea';
 
 //Dashboard Agustin
 import { DashboardAgustin } from './ComponenteAgustin';
 import { ROLES } from '../utils/constants.js';
 
 const socket = io(import.meta.env.VITE_URL_BACKEND || '/');
+// Función utilitaria para evitar errores de tipo al procesar fechas
+const parsearFechaSegura = (fecha) => {
+  if (!fecha) return null;
+  if (fecha instanceof Date) return fecha;
+  if (typeof fecha === 'string') {
+    return new Date(fecha.replace(' ', 'T'));
+  }
+  return new Date(fecha);
+};
 
 export default function Main({ cambiarVista, usuario }) {
  
@@ -60,7 +71,7 @@ export default function Main({ cambiarVista, usuario }) {
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
     marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
     exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,
-    indicadores, cargarIndicadores, marcarComoVista
+    indicadores, cargarIndicadores, marcarComoVista, asignarTarea
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
   // Hook de Tickets
@@ -124,6 +135,9 @@ export default function Main({ cambiarVista, usuario }) {
   const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
   const [historialSeleccionado, setHistorialSeleccionado] = useState([]); 
 
+  // Historial por Tarea (Modal Nuevo)
+  const [mostrarModalHistorialTarea, setMostrarModalHistorialTarea] = useState(false);
+  const [tareaIdHistorial, setTareaIdHistorial] = useState(null);
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
 
@@ -667,7 +681,7 @@ export default function Main({ cambiarVista, usuario }) {
             return tiempoA - tiempoB;
         }
 
-        // 4. EL ORDEN INTELIGENTE (ATRASADA > PROCESO > PAUSA > PENDIENTE)
+        // 4. EL ORDEN (ATRASADA > PROCESO > PAUSA > PENDIENTE)
         if (ordenTareas === 'atrasadas') {
             
             // Función interna que asigna el "peso" (1 al 5) según el estado
@@ -767,21 +781,9 @@ export default function Main({ cambiarVista, usuario }) {
            t.estado !== 'En Curso';
     }).length;
 
-    const handleVerHistorial = async (idTarea) => {
-        try {
-            const response = await fetch(`${URL_API}/tareas/historial/${idTarea}`);
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                setHistorialSeleccionado(data);
-                setMostrarModalHistorial(true);
-            } else {
-                console.error("Error al obtener el historial de la tarea");
-            }
-        } catch (error) {
-            console.error("Error de red:", error);
-        }
+    const abrirHistorialTarea = (tarea) => {
+        setTareaIdHistorial(tarea.id);
+        setMostrarModalHistorialTarea(true);
     };
 
     const handleVerHistorialGlobal = async () => {
@@ -801,7 +803,9 @@ export default function Main({ cambiarVista, usuario }) {
             toast.error("Error de conexión al servidor");
         }
     };
-  // ==========================================
+
+  // ===============
+  // ===========================
   // 11. RENDERIZADO DEL COMPONENTE (UI)
   // ==========================================
   return (
@@ -1376,319 +1380,54 @@ export default function Main({ cambiarVista, usuario }) {
         {/* ==================================================== */}
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && pestañaActual === 'tareas' && (
           <div className="animate__animated animate__fadeIn">
-            <h2 className="h3 text-secondary">Control de Tareas Diarias</h2>
-              
-              <div className="d-flex gap-2">
+            <div className="d-flex gap-2 mb-3">
                 {parseInt(rolUsuario) === ROLES.ADMIN && (
                   <>
                     {parseInt(rolUsuario) === ROLES.ADMIN && (
                       <DropdownReporte exportarHistorialTareas={exportarHistorialTareas} />
                     )}  
-                    <button className="btn btn-secondary fw-bold shadow-sm" onClick={handleVerHistorialGlobal}>
-                      🗄️ Ver Historial Global
-                    </button>
+                    
                   </>
                 )}
+                
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
                   setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
                   setMostrarModalTarea(true); 
                 }}>
                   + Nuevo
                 </button>
+                <button className="btn btn-secondary fw-bold shadow-sm" onClick={handleVerHistorialGlobal}>
+                      🗄️ Ver Historial Global
+                    </button>
               </div>
-
-            <div className="row mt-4 mb-4">
-              {/* CONTADORES DE TAREAS */}
-              <div className="row mb-4 text-center">
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-secondary text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>TOTAL</h6>
-                              <h3 className="mb-0 fw-bold">{tareasTotales}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-primary text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>EN CURSO</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasEnProceso}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-warning text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PAUSADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasPausadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-danger text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>ATRASADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasAtrasadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-info text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PRÓXIMAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasProximas}</h3>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-success text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>FINALIZADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasFinalizadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-            </div>
-
-            
-            <div className="card shadow-sm border-0 mb-3">
-              {/* NUEVO: Filtros y Buscador de Tareas */}
-            <div className="card shadow-sm border-0 mb-3">
-              <div className="card-body p-3">
-                {/* Fila Superior: Botones de Categoría */}
-                <div className="d-flex flex-wrap gap-2 mb-3">
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoriaTarea('Todas')}>Todas</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Limpieza / General' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoriaTarea('Limpieza / General')}>🧹 Limpieza</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'CCTV y Servidores' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoriaTarea('CCTV y Servidores')}>📹 CCTV y Servidores</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Redes' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoriaTarea('Redes')}>🌐 Redes</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Reportes' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoriaTarea('Reportes')}>📑 Reportes</button>
-                </div>
-
-                {/* Fila Inferior: Buscador y Selectores */}
-                <div className="row g-2">
-                  <div className="col-md-6">
-                  
-                  {/* Grupo de Buscador y Ordenado */}
-                    <div className="d-flex gap-2 w-100 w-md-auto">
-                      <div className="input-group input-group-sm shadow-sm" style={{ maxWidth: '250px' }}>
-                          <span className="input-group-text bg-white border-end-0">🔍</span>
-                          <input 
-                              type="text" 
-                              className="form-control border-start-0" 
-                              placeholder="Buscar rutina..." 
-                              value={busquedaTarea}
-                              onChange={(e) => setBusquedaTarea(e.target.value)}
-                          />
-                      </div>
-                      
-                      <select 
-                          className="form-select form-select-sm border-info shadow-sm w-auto"
-                          value={ordenTareas}
-                          onChange={(e) => setOrdenTareas(e.target.value)}
-                      >
-                          <option value="proxima">📅 Próxima Ejecución</option>
-                          <option value="atrasadas">⚠️ Atrasadas Primero</option>
-                          <option value="nombre">🔤 Nombre (A-Z)</option>
-                          <option value="categoria">📁 Por Categoría</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-              <div className="card-body p-0 table-responsive">
-                <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
-                  <thead className="table-light">
-                    <tr>
-                      <th>Rutina a realizar</th>
-                      <th>Categoría</th>
-                      <th>Frecuencia</th>
-                      <th>Próxima Ejecución</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                   {tareasFiltradas.length > 0 ? (tareasFiltradas.map(tarea => {
-                        // Verificamos si la tarea ya se completó hoy
-                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
-                        const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
-                        
-                        const estaTerminada = tarea.estado === 'Finalizada' || completadaHoy;
-
-                        let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
-
-                        // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
-                        if (tarea.estado === 'En Curso' && tarea.fecha_inicio_real) {
-                            const milisegundosPasados = new Date() - new Date(tarea.fecha_inicio_real);
-                            const minutosExtra = milisegundosPasados / 1000 / 60;
-
-                            if (minutosExtra > 0) {
-                                minutosMostrados += minutosExtra;
-                            }
-                        }
-                        return (
-                          <tr 
-                            key={tarea.id} 
-                            // Si está completada, le bajamos la opacidad al 50% para el efecto difuminado
-                            style={{ opacity: estaTerminada ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
-                            onClick={() => marcarComoVista(tarea.id)}
-
-                          >
-                            {/* Tachamos el título si ya está lista */}
-                            <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
-                              {tarea.titulo}
-                              {indicadores?.idsNuevas?.includes(tarea.id) && (
-                                <span className="badge bg-danger rounded-circle p-1 ms-2 d-inline-block" title="¡Tarea Nueva!" style={{ width: '10px', height: '10px' }}>
-                                  <span className="visually-hidden">Tarea Nueva</span>
-                                </span>
-                              )}
-                            </td>
-                            <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
-                            <td className="text-secondary fw-semibold">
-                              {formatearFrecuenciaTexto(tarea)} <span className="text-dark fw-normal">(⏰ {tarea.hora_programada?.substring(0, 5)})</span>
-                            </td>
-                           
-                            <td>
-                              <div className="d-flex flex-column align-items-center gap-1">
-                                {completadaHoy ? (
-                                  <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
-                                    Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                                  </span>
-                                ) : (
-                                  <>
-                                    {/* 1. Mostramos la cuenta regresiva o la hora programada original */}
-                                    <small className="text-muted fw-bold d-block mb-1">
-                                      {tarea.estado_visual === 'Esperando fecha' 
-                                        ? calcularTiempoTarea(tarea) 
-                                        : `Prog: ${new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR')} ${tarea.hora_programada?.substring(0, 5)}`}
-                                    </small>
-
-                                    {/* 2. El badge dinámico SOLO aparece cuando hay un estado crítico o activo */}
-                                    {tarea.estado_visual !== 'Esperando fecha' && (
-                                      <span className={`badge ${coloresEstado[tarea.estado_visual]} shadow-sm px-2 py-1`} style={{ fontSize: '0.8rem' }}>
-                                        {iconosEstado[tarea.estado_visual]} {tarea.estado_visual}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                            {/* 5. Acciones y Botones del Cronómetro */}
-                            <td className="align-middle">
-                              {/* Contenedor principal: Columna vertical centrada */}
-                              <div className="d-flex flex-column align-items-center gap-1">
-
-                                <div className="d-flex align-items-center justify-content-center gap-2">
-                                  <button 
-                                    className="btn btn-sm btn-outline-info" 
-                                    onClick={() => handleVerHistorial(tarea.id)}
-                                    title="Ver Historial"
-                                  >
-                                    🕒
-                                  </button>
-                                  {completadaHoy ? (
-                                    <>
-                                      <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
-                                        ✔️ Lista por hoy
-                                      </span>
-                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                        🗑️
-                                      </button>
-                                    </>
-                                  ) : tareaFutura ? (
-                                    <>
-                                      <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
-                                        ⏳ Esperando fecha
-                                      </span>
-                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                        🗑️
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {/* Botón Iniciar */}
-                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa == 1) && (
-                                        <button 
-                                          className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
-                                          onClick={() => iniciarTarea(tarea.id)} 
-                                          title="Iniciar o Reanudar tarea"
-                                        >
-                                          ▶ Iniciar
-                                        </button>
-                                      )}
-
-                                      {/* Botón Pausar */}
-                                      {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
-                                        <button 
-                                          className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
-                                          onClick={() => pausarTarea(tarea.id)} 
-                                          title="Pausar por una emergencia"
-                                        >
-                                          ⏸ Pausar
-                                        </button>
-                                      )}
-
-                                      {/* Botón Finalizar */}
-                                      <button 
-                                        className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
-                                        onClick={() => {
-                                          setTareaSeleccionadaFinalizar(tarea);
-                                          setMostrarModalFinalizar(true);
-                                        }}
-                                        title="Finalizar tarea"
-                                      >
-                                        ✅ Finalizar
-                                      </button>
-                                      
-                                      {/* Botón Eliminar */}
-                                      <button 
-                                        className="btn btn-outline-danger btn-sm shadow-sm" 
-                                        title="Eliminar Rutina" 
-                                        onClick={() => eliminarTarea(tarea.id)}
-                                      >
-                                        🗑️
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {/* Botón Editar (Siempre visible y alineado al final) */}
-                                  <button 
-                                    className="btn btn-outline-warning btn-sm shadow-sm" 
-                                    title="Editar Rutina" 
-                                    onClick={() => abrirModalEditarTarea(tarea)}
-                                  >
-                                    ✏️
-                                  </button>
-
-                                </div>
-                                {!completadaHoy && !tareaFutura && (tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && (
-                                  <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                    ⏱️ {Math.floor(minutosMostrados)} min dedicados
-                                    {tarea.estado === 'En Curso' && !tarea.en_pausa && (
-                                      <span className="ms-1 text-primary"> (corriendo...)</span>
-                                    )}
-                                  </div>
-                                )}
-
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr><td colSpan="5" className="text-muted py-4">No hay rutinas programadas. ¡Crea la primera!</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <TableroTareas 
+                tareas={tareasFiltradas}
+                iniciarTarea={iniciarTarea}
+                pausarTarea={pausarTarea}
+                setTareaSeleccionadaFinalizar={setTareaSeleccionadaFinalizar}
+                setMostrarModalFinalizar={setMostrarModalFinalizar}
+                formatearFrecuenciaTexto={formatearFrecuenciaTexto}
+                indicadores={indicadores}
+                marcarComoVista={marcarComoVista}
+                asignarTarea={asignarTarea}
+                esAdmin={esAdmin}
+                ticker={ticker}
+                abrirModalEditarTarea={abrirModalEditarTarea}
+                usuarioLogueado={usuario?.nombre || usuario}
+                usuariosLista={usuariosLista}
+                abrirHistorialTarea={abrirHistorialTarea} // 👈 Pasamos la función
+            />
           </div>
+        )}
+
+        {/* --- MODALES DE TAREAS --- */}
+        {mostrarModalHistorialTarea && (
+          <ModalHistorialTarea 
+            mostrar={mostrarModalHistorialTarea}
+            setMostrar={setMostrarModalHistorialTarea}
+            tareaId={tareaIdHistorial}
+            URL_API={URL_API}
+          />
         )}
       {VistaCarga}
       {/* Renderizamos el Modal solo si el estado es true */}
@@ -1748,6 +1487,11 @@ export default function Main({ cambiarVista, usuario }) {
         usuariosLista={usuariosLista}
         rolUsuario={rolUsuario}
         usuarioLogueado={usuario}
+        indicadores={indicadores}
+        marcarComoVista={marcarComoVista}
+        asignarTarea={asignarTarea}
+        esAdmin={esAdmin}
+        URL_API={URL_API}
       />
     </motion.div>
   );

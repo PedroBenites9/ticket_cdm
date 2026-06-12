@@ -274,26 +274,40 @@ const exportarHistorialTareas = async (fechaInicio, fechaFin) => {
         })
         .map(tarea => {
           const fechaProx = new Date(tarea.proxima_ejecucion.replace(' ', 'T'));
-          const estaAtrasada = fechaProx < new Date();
-          
-          let estadoVisual = "⏳ Pendiente / Programada";
-          if (tarea.estado === 'En Curso') estadoVisual = "▶️ En proceso";
-          else if (tarea.estado === 'Pausada') estadoVisual = "⏸️ En pausa";
-          else if (estaAtrasada) estadoVisual = "⚠️ Atrasada (No Cumplida)";
+          const esHoy = fechaProx.toDateString() === new Date().toDateString();
+          const horaActual = new Date().getHours();
+          const estaAtrasada = fechaProx < new Date() && !esHoy;
+        
+        let estadoVisual = "⏳ Pendiente / Programada";
+        if (tarea.estado === 'En Curso') estadoVisual = "▶️ En proceso";
+        else if (tarea.estado === 'Pausada') estadoVisual = "⏸️ En pausa";
+        else if (esHoy) {
+            estadoVisual = horaActual >= 18 ? "⚠️ Atrasada (Pasada las 18hs)" : "⏳ En espera";
+        } else if (estaAtrasada) {
+            estadoVisual = "⚠️ Atrasada (No Cumplida)";
+        }
 
-          return {
-            "ID Tarea": tarea.id,
-            "Rutina a Realizar": tarea.titulo,
-            "Estado": estadoVisual,
-            "Frecuencia Exacta": obtenerFrecuenciaDetallada(tarea),
-            "Fecha Vencimiento": `${fechaProx.toLocaleDateString('es-AR')} ${fechaProx.toLocaleTimeString('es-AR').substring(0,5)}`,
-            "Asignado / Completado Por": "N/A (No realizada)",
-            "Fecha Finalización": "Pendiente",
-            "Hora Finalización": "Pendiente",
-            "Tiempo Dedicado": "0 min",
-            "Comentario": "N/A",
-            "Evidencia (Archivo)": "Sin archivo"
-          };
+        // Formateo del texto de frecuencia detallada para la columna del Excel
+        let aclaracionFrecuencia = tarea.frecuencia;
+        if (tarea.frecuencia === 'Semestral') aclaracionFrecuencia = 'Semestral (cada 6 meses)';
+        else if (tarea.frecuencia === 'Bimestral') aclaracionFrecuencia = 'Bimestral (cada 2 meses)';
+        else if (tarea.frecuencia === 'Trimestral') aclaracionFrecuencia = 'Trimestral (cada 3 meses)';
+        else if (tarea.frecuencia === 'Mensual') aclaracionFrecuencia = 'Mensual (cada 1 mes)';
+        else if (tarea.frecuencia === 'Fecha Unica') aclaracionFrecuencia = 'Fecha Única (única vez)';
+
+        return {
+          "ID Tarea": tarea.id,
+          "Rutina a Realizar": tarea.titulo,
+          "Estado": estadoVisual,
+          "Frecuencia Exacta": aclaracionFrecuencia,
+          "Fecha Vencimiento": `${fechaProx.toLocaleDateString('es-AR')} ${tarea.hora_programada?.substring(0,5)}`,
+          "Asignado / Completado Por": "N/A (No realizada)",
+          "Fecha Finalización": "Pendiente",
+          "Hora Finalización": "Pendiente",
+          "Tiempo Dedicado": "0 min",
+          "Comentario": "N/A",
+          "Evidencia (Archivo)": "Sin archivo"
+        };
         });
 
       // 5. Unimos las dos listas ya filtradas
@@ -339,12 +353,12 @@ const exportarHistorialTareas = async (fechaInicio, fechaFin) => {
     return `Faltan ${horas}h ${minutos}m`;
   };
 
-// 1. Ponemos el helper acá adentro
-    const obtenerTiempo = (fechaStr) => {
-        if (!fechaStr) return Infinity;
-        if (fechaStr.includes('-')) return new Date(fechaStr).getTime();
-        
-        const parts = fechaStr.split(/[\/\s:]/);
+  // 1. Ponemos el helper acá adentro
+  const obtenerTiempo = (fechaStr) => {
+    if (!fechaStr) return Infinity;
+    if (fechaStr.includes('-')) return new Date(fechaStr).getTime();
+    
+    const parts = fechaStr.split(/[\/\s:]/);
         if (parts.length >= 3) {
             const d = parseInt(parts[0], 10);
             const m = parseInt(parts[1], 10) - 1;
@@ -455,6 +469,20 @@ const exportarHistorialTareas = async (fechaInicio, fechaFin) => {
     // 3. Recién ahora abrimos el modal
     setMostrarModalTarea(true); // O la variable que uses para abrirlo
 };
+const asignarTarea = async (idTarea, nombreTecnico) => {
+    try {
+      const res = await fetch(`${URL_API}/tareas/${idTarea}/asignar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_asignado: nombreTecnico })
+      });
+      if (res.ok) {
+        toast.success(`Tarea asignada a ${nombreTecnico}`);
+      }
+    } catch (error) {
+      toast.error("Error al asignar técnico");
+    }
+  };
 
   // 3. EXPORTAMOS LO QUE MAIN.JSX NECESITA
   return {
@@ -465,6 +493,7 @@ const exportarHistorialTareas = async (fechaInicio, fechaFin) => {
     iniciarTarea, pausarTarea, eliminarTarea,
     exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,indicadores, 
     cargarIndicadores, 
-    marcarComoVista
+    marcarComoVista,
+    asignarTarea
   };
 };
