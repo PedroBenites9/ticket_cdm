@@ -24,19 +24,20 @@ export default function ModalHistoricoTareas({ historial, cerrarModal, URL_API }
         });
     }, [historial, busqueda, filtroUsuario]);
     
-    const manejarDescarga = (rutaFisica) => {
+    const manejarDescarga = (rutaFisica, item) => {
         if (!rutaFisica) return;
 
         // 1. Extraemos SOLO el nombre del archivo
         const nombreArchivo = rutaFisica.split(/[\/\\]/).pop();
 
         // 2. Armamos la URL usando el URL_API que ya viene de las props del componente
-        const urlDescarga = `${URL_API}/tareas/archivo/${nombreArchivo}`;
+        const urlDescarga = `${URL_API}/tareas/archivo/${nombreArchivo}?name=${encodeURIComponent(item?.titulo_tarea || 'Tarea')}`;
 
         // 3. Abrimos la imagen o PDF en una pestaña nueva
         window.open(urlDescarga, '_blank');
         console.log(urlDescarga)
     };
+
     // Helper para determinar el ícono y color según la extensión
     const obtenerInfoArchivo = (ruta) => {
         if (!ruta) return { icono: '📎', color: 'btn-outline-secondary', texto: 'Descargar' };
@@ -70,15 +71,16 @@ export default function ModalHistoricoTareas({ historial, cerrarModal, URL_API }
                 return { icono: '⬇️', color: 'btn-outline-primary', texto: 'Descargar' };
         }
     };
+
     return (
-        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1060 }}>
             <motion.div 
                 className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <div className="modal-content shadow-lg border-0">
-                    <div className="modal-header bg-dark text-white">
+                <div className="modal-content shadow-lg border-0" style={{ borderRadius: '15px' }}>
+                    <div className="modal-header bg-dark text-white" style={{ borderTopLeftRadius: '15px', borderTopRightRadius: '15px' }}>
                         <h5 className="modal-title">
                             🗄️ Historial de Tareas Finalizadas
                         </h5>
@@ -142,15 +144,36 @@ export default function ModalHistoricoTareas({ historial, cerrarModal, URL_API }
                                                 <td className="text-center">
                                                     {item.archivo_adjunto ? (
                                                         (() => {
-                                                            const info = obtenerInfoArchivo(item.archivo_adjunto);
+                                                            let archivos = [];
+                                                            try {
+                                                                // Desglosamos el JSON Array de la base de datos
+                                                                archivos = JSON.parse(item.archivo_adjunto);
+                                                                if (!Array.isArray(archivos)) archivos = [archivos];
+                                                            } catch (e) {
+                                                                // Fallback seguro si es un registro legacy (string plano viejo)
+                                                                archivos = [item.archivo_adjunto];
+                                                            }
+
                                                             return (
-                                                                <button 
-                                                                    onClick={() => manejarDescarga(item.archivo_adjunto)}
-                                                                    className={`btn btn-sm ${info.color} d-inline-flex align-items-center gap-1`}
-                                                                    title={`Descargar archivo .${item.archivo_adjunto.split('.').pop()}`}
-                                                                >
-                                                                    <span style={{ fontSize: '1.1rem' }}>{info.icono}</span> {info.texto}
-                                                                </button>
+                                                                <div className="d-flex justify-content-center gap-2 flex-wrap">
+                                                                    {archivos.map((file, idx) => {
+                                                                        const info = obtenerInfoArchivo(file);
+                                                                        const nombreLimpio = file.split(/[\/\\]/).pop();
+
+                                                                        return (
+                                                                            <button 
+                                                                                key={idx}
+                                                                                onClick={() => manejarDescarga(file, item)}
+                                                                                className={`btn btn-sm ${info.color} d-inline-flex align-items-center gap-1`}
+                                                                                title={`Descargar: ${nombreLimpio}`}
+                                                                                style={{ fontSize: '0.75rem', fontWeight: '500' }}
+                                                                            >
+                                                                                <span style={{ fontSize: '1rem' }}>{info.icono}</span> 
+                                                                                {info.texto} {archivos.length > 1 ? `#${idx + 1}` : ''}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             );
                                                         })()
                                                     ) : (

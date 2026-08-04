@@ -118,7 +118,8 @@ const guardarTicket = async (e) => {
         const paqueteAEnviar = {
             ...formulario,
             solicitante: formulario.solicitante || nombreReal,
-            usuario_actual: nombreReal 
+            usuario_actual: nombreReal,
+            id_area:parseInt(areaReal )
         };
 
         let respuesta;

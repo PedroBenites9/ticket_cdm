@@ -25,7 +25,7 @@ import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
 import { ModalHistorico } from './ModalHistorico'; 
 import ModalHistoricoTareas from './ModalHistoricoTareas';
-import ModalHistorialTarea from './ModalHistorialTarea'; // 👈 Nuevo modal
+import ModalHistorialTarea from './ModalHistorialTarea'; 
 import DropdownReporte from './DropdownReporte';
 import TableroTareas from './TableroTarea';
 
@@ -55,6 +55,7 @@ export default function Main({ cambiarVista, usuario }) {
   const esAdmin = miRol === ROLES.ADMIN;
   const esTecnico = miRol === ROLES.TECNICO;
   const esCoordinadorGral = miRol === ROLES.COORDINADOR_GRAL;
+  const esCoordinadorArea = miRol === ROLES.COORDINADOR_AREA;
 
  // ==========================================
   // 1. HOOKS PRINCIPALES
@@ -145,51 +146,8 @@ export default function Main({ cambiarVista, usuario }) {
   const [ordenTareas, setOrdenTareas] = useState('proxima'); // Por defecto ordena por fecha
   
   // ==========================================
-  // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
+  // 4. GESTIÓN DE SESIÓN
   // ==========================================
-  const cerrarSesionAuto = () => {
-    localStorage.removeItem('token_acceso'); 
-    localStorage.removeItem('nombre_usuario');
-    localStorage.removeItem('rol_usuario');
-    localStorage.removeItem('area_usuario');
-    localStorage.removeItem('horaLogin');
-    toast.warning("⏱️ Tu sesión ha expirado por seguridad.");
-    cambiarVista('login');
-  };
-
-  useEffect(() => {
-    let ultimoRegistro = Date.now();
-    const registrarActividad = () => {
-      const ahora = Date.now();
-      if (ahora - ultimoRegistro > 2000) {
-        localStorage.setItem('ultimaActividad', ahora);
-        ultimoRegistro = ahora;
-      }
-    };
-    localStorage.setItem('ultimaActividad', Date.now());
-    window.addEventListener('mousemove', registrarActividad);
-    window.addEventListener('keydown', registrarActividad);
-    window.addEventListener('click', registrarActividad);
-    window.addEventListener('scroll', registrarActividad);
-
-    const patrullero = setInterval(() => {
-      const ultimaVez = parseInt(localStorage.getItem('ultimaActividad') || Date.now());
-      const tiempoActual = Date.now();
-      const limiteInactividad = 30 * 60 * 1000;
-      if (tiempoActual - ultimaVez > limiteInactividad) {
-        cerrarSesionAuto();
-      }
-    }, 60000);
-
-    return () => {
-      window.removeEventListener('mousemove', registrarActividad);
-      window.removeEventListener('keydown', registrarActividad);
-      window.removeEventListener('click', registrarActividad);
-      window.removeEventListener('scroll', registrarActividad);
-      clearInterval(patrullero);
-    };
-  }, []);
-
 
 
   useEffect(() => {
@@ -200,19 +158,11 @@ export default function Main({ cambiarVista, usuario }) {
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
   
-  // Hook para hacer "latir" a React cada 1 minuto
-  const [ticker, setTicker] = useState(0);
+
 
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
   // ==========================================
-
-  // Efecto para actualizar el tiempo en pantalla (Ticker)
-  useEffect(() => {
-    // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto) para refrescar contadores de tiempo en pantalla
-    const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
-    return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
-  }, []);
 
   // Efecto para la carga inicial de datos desde la API
   useEffect(() => {
@@ -220,7 +170,7 @@ export default function Main({ cambiarVista, usuario }) {
       try {
         // Obtenemos todos los datos en paralelo para hacer la carga más rápida
         const [respuestaTickets, respuestaClientes, respuestaTareas, respuestaAreas, respuestaRoles, respuestaUsuario] = await Promise.all([
-          fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}`),
+          fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}&solicitante=${encodeURIComponent(usuario)}`),
           fetch(`${URL_API}/clientes`),
           fetch(`${URL_API}/tareas`),
           fetch(`${URL_API}/usuarios/areas`),
@@ -252,7 +202,7 @@ export default function Main({ cambiarVista, usuario }) {
     // WEBSOCKETS: GESTIÓN DE TICKETS Y BITÁCORA
     // ==================================================
 
-    // 1. Escuchar creación de nuevos tickets
+    // 1. Escuchar creación de nuevos ticketstick
    const manejarTicketCreado = (nuevoTicket) => {
         // 1. Aseguramos que todo sea un número entero (parseInt)
         const miRol = parseInt(localStorage.getItem('rol_usuario') || rolUsuario);
@@ -525,11 +475,11 @@ export default function Main({ cambiarVista, usuario }) {
   // Si sos un usuario final, el filtro solo deja pasar los tickets que vos creaste.
 
   const ticketsParaLaTabla = useMemo(() => {
-    if (esAdmin || esTecnico) {
+    if (esAdmin || esTecnico|| esCoordinadorGral) {
       return ticketsOrdenados;
     }
     
-    if (esCoordinadorGral) {
+    if (esCoordinadorArea) {
       // El coordinador general solo ve los tickets de su área en la tabla
       return ticketsOrdenados.filter(t => t.id_area === parseInt(areaUsuario));
     }
@@ -540,7 +490,7 @@ export default function Main({ cambiarVista, usuario }) {
         const usuarioLimpio = (usuario || '').toLowerCase().trim();
         return solicitanteLimpio === usuarioLimpio;
     });
-  }, [ticketsOrdenados, esAdmin, esTecnico, esCoordinadorGral, usuario, areaUsuario]);
+  }, [ticketsOrdenados, esAdmin, esTecnico, esCoordinadorGral, esCoordinadorArea, usuario, areaUsuario]);
 
   const ticketsPaginados = ticketsParaLaTabla.slice(indicePrimerTicket, indiceUltimoTicket);
     
@@ -871,7 +821,7 @@ export default function Main({ cambiarVista, usuario }) {
                 className={`nav-link text-dark d-flex align-items-center ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} 
                 onClick={() => setPestañaActual('tareas')}
               >
-                🔄 Mantenimiento y Rutinas
+                📋 Tareas Rutinarias 
                 
                 {/* 🔴 EL GLOBITO DE NOTIFICACIÓN EN LA PESTAÑA */}
                 {indicadores?.cantidadNuevas > 0 && (
@@ -1208,7 +1158,7 @@ export default function Main({ cambiarVista, usuario }) {
                 <tr>
                   <th>Código</th>
                   <th>Origen</th>
-                  {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
+                  {(esAdmin || esTecnico || esCoordinadorGral || esCoordinadorArea) && (
                   <th>Solicitante / Cliente</th>
                   )}
                   <th>Asunto</th>
@@ -1223,6 +1173,7 @@ export default function Main({ cambiarVista, usuario }) {
                 {cargando ? (
                   <tr><td colSpan="10">Cargando...</td></tr>
                 ) : ticketsPaginados.length > 0 ? (ticketsPaginados.map((ticket) => (
+                
                    <tr key={ticket.id} title={ticket.descripcion} 
                     style={{ cursor: 'pointer' }}>
                       {/* 1. Código */}
@@ -1235,7 +1186,8 @@ export default function Main({ cambiarVista, usuario }) {
                           {ticket.tipo_origen || 'Interno'}
                         </span>
                       </td>
-                        {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
+                      
+                       {(esAdmin || esTecnico || esCoordinadorGral || esCoordinadorArea) && (        
                         <td>
                           {ticket.tipo_origen === 'Externo' ? (
                             <>
@@ -1251,7 +1203,7 @@ export default function Main({ cambiarVista, usuario }) {
                             <span>👤 {ticket.solicitante || 'Usuario'}</span>
                           )}
                         </td>
-                      )}
+)}
                       {/* 4. Asunto */}
                       <td>{ticket.asunto}
                         
@@ -1300,7 +1252,7 @@ export default function Main({ cambiarVista, usuario }) {
                           </div>
                         ) : (
                           <div className="d-flex justify-content-center align-items-center gap-1">
-                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN) && (
+                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN ) && (
                                <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
                                  <option value="Abierto">Abierto</option>
                                  <option value="En Proceso">En Proceso</option>
@@ -1411,11 +1363,10 @@ export default function Main({ cambiarVista, usuario }) {
                 marcarComoVista={marcarComoVista}
                 asignarTarea={asignarTarea}
                 esAdmin={esAdmin}
-                ticker={ticker}
                 abrirModalEditarTarea={abrirModalEditarTarea}
                 usuarioLogueado={usuario?.nombre || usuario}
                 usuariosLista={usuariosLista}
-                abrirHistorialTarea={abrirHistorialTarea} // 👈 Pasamos la función
+                abrirHistorialTarea={abrirHistorialTarea}
             />
           </div>
         )}
@@ -1436,6 +1387,7 @@ export default function Main({ cambiarVista, usuario }) {
               tickets={tickets} // Le pasás tu lista completa de tickets cruda
               cerrarModal={() => setMostrarModalHistorico(false)} 
               areasDisponibles={areasDisponibles}
+              abrirModalTicket={abrirModalEditar}
           />
       )}
       {mostrarModalHistorial && (

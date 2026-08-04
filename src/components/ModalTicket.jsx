@@ -135,7 +135,7 @@ const ModalTicket = ({
   };
 
   return (
-    <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+    <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1070 }}>
       <style>{estilosParche}</style>
       <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div className="modal-content shadow-lg border-0" style={{ borderRadius: '15px' }}>
@@ -160,7 +160,6 @@ const ModalTicket = ({
                     name="solicitante"
                     value={formulario.solicitante || ''}
                     onChange={(e)=>manejarCambio(e)}
-                    required
                     disabled={esSoloLectura}
                     style={{ borderRadius: '10px' }}
                   >
@@ -247,7 +246,7 @@ const ModalTicket = ({
                                   const rutaReal = typeof item === 'object' ? item.ruta : item;
                                   const nombreMostrar = typeof item === 'object' ? item.nombreOriginal : rutaReal.split(/[/\\]/).pop();
                                   const info = obtenerInfoArchivo(rutaReal);
-                                  const urlArch = `${URL_API}/tickets/archivo/${rutaReal.split(/[/\\]/).pop()}`;
+                                  const urlArch = `${URL_API}/tickets/archivo/${rutaReal.split(/[/\\]/).pop()}?ticketName=${encodeURIComponent(formulario?.asunto || 'Ticket')}`;
                                   return info.tipo === 'img' ? (
                                       <a key={idx} href={urlArch} target="_blank" rel="noreferrer"><img src={urlArch} className="rounded border shadow-sm" style={{ height: '50px', width: '50px', objectFit: 'cover' }} /></a>
                                   ) : (
@@ -311,7 +310,7 @@ const ModalTicket = ({
                                           const rutaReal = typeof item === 'object' ? item.ruta : item;
                                           const nombreMostrar = typeof item === 'object' ? item.nombreOriginal : rutaReal.split(/[/\\]/).pop();
                                           const info = obtenerInfoArchivo(rutaReal);
-                                          const urlArch = `${URL_API}/tickets/archivo/${rutaReal.split(/[/\\]/).pop()}`;
+                                          const urlArch = `${URL_API}/tickets/archivo/${rutaReal.split(/[/\\]/).pop()}?ticketName=${encodeURIComponent(formulario?.asunto || 'Ticket')}`;
                                           return info.tipo === 'img' ? (
                                               <a key={idx} href={urlArch} target="_blank" rel="noreferrer"><img src={urlArch} className="rounded border shadow-sm" style={{ maxHeight: '100px', maxWidth: '100%', objectFit: 'cover' }} /></a>
                                           ) : (

@@ -177,7 +177,7 @@ const ModalFinalizarTarea = ({
                                     return (
                                         <div key={idx} className="d-flex align-items-center justify-content-between bg-info bg-opacity-10 p-2 rounded-3 border border-info border-opacity-25">
                                             <a 
-                                                href={`${URL_API}/tareas/archivo/${nombreArchivo}`} 
+                                                href={`${URL_API}/tareas/archivo/${nombreArchivo}?name=${encodeURIComponent(tarea?.titulo || 'Tarea')}`} 
                                                 target="_blank" 
                                                 rel="noreferrer"
                                                 className="small text-info text-truncate w-75 text-decoration-none"

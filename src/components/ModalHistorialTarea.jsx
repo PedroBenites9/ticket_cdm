@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
 
+/*
+
+
+page obsoleta
+
+
+*/
+
+
+
+
+
+
+
+        
 const ModalHistorialTarea = ({ mostrar, setMostrar, tareaId, URL_API }) => {
     const [historial, setHistorial] = useState([]);
     const [cargando, setCargando] = useState(true);
