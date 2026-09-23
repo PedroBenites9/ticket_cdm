@@ -82,7 +82,7 @@ export const useTickets = (URL_API, usuario, mostrarCarga, ocultarCarga) => {
   const abrirModalEditar = (ticket) => {
     setFormulario({
       asunto: ticket.asunto, categoria: ticket.categoria, prioridad: ticket.prioridad,
-      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen, solicitante: ticket.solicitante || 'Interno', cliente: ticket.cliente || '',archivo_adjunto: ticket.archivo_adjunto
+      descripcion: ticket.descripcion, tipo_origen: ticket.tipo_origen, solicitante: ticket.solicitante || 'Interno', cliente: ticket.cliente || '',archivo_adjunto: ticket.archivo_adjunto, fecha_creacion: ticket.fecha_creacion
     });
     setEditandoId(ticket.id);
     cargarComentarios(ticket.id);
@@ -118,7 +118,8 @@ const guardarTicket = async (e) => {
         const paqueteAEnviar = {
             ...formulario,
             solicitante: formulario.solicitante || nombreReal,
-            usuario_actual: nombreReal 
+            usuario_actual: nombreReal,
+            id_area:parseInt(areaReal )
         };
 
         let respuesta;

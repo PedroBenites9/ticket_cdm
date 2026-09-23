@@ -121,12 +121,60 @@ const ModalDetalleTareasGral = ({ tareas, filtroInicial, cerrarModal, indicadore
     );
 };
 
-// --- COMPONENTE PRINCIPAL ---
-export const DashboardAgustin = ({ tickets, tareas, indicadoresTareas, obtenerTiempo, fueCompletadaHoy, usuarioLogueado }) => {
+// --- COMPONENTE TAREAS ---
+export const DashboardAgustinTareas = ({ tareas, indicadoresTareas, obtenerTiempo, fueCompletadaHoy, usuarioLogueado }) => {
     const [modalGralAbierto, setModalGralAbierto] = useState(false);
     const [filtroSeleccionadoGral, setFiltroSeleccionadoGral] = useState('');
 
-    // --- LÓGICA DE TICKETS (RECHARTS) ---
+    return (
+        <div className="container-fluid mb-4 animate__animated animate__fadeIn p-0">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h4 className="text-secondary m-0 fw-bold">📊 Dashboard Tareas: {usuarioLogueado || 'Coordinador'}</h4>
+                <span className="badge bg-dark px-3 py-2">Vista de coordinador gral.</span>
+            </div>
+            
+            <div className="row g-3">
+                {[
+                    { id: 'TOTAL', title: 'TOTAL', value: tareas.length, color: 'secondary' },
+                    { id: 'ATRASADAS', title: 'ATRASADAS', value: indicadoresTareas.atrasadas, color: 'danger' },
+                    { id: 'PROCESO', title: 'EN PROCESO', value: indicadoresTareas.proceso, color: 'warning text-dark' },
+                    { id: 'PAUSA', title: 'EN PAUSA', value: indicadoresTareas.pausa, color: 'info text-dark' },
+                    { id: 'PROXIMAS', title: 'PRÓXIMAS', value: indicadoresTareas.proximas, color: 'primary' },
+                    { id: 'FINALIZADAS', title: 'FINALIZADAS', value: indicadoresTareas.finalizadas, color: 'success' }
+                ].map(card => (
+                    <div key={card.id} className="col-12 col-sm-6 col-md">
+                        <motion.div 
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.98 }}
+                            className={`card bg-${card.color.split(' ')[0]} ${card.color.includes('text-dark') ? 'text-dark' : 'text-white'} shadow-sm border-0 h-100 text-center`}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => { setFiltroSeleccionadoGral(card.id); setModalGralAbierto(true); }}
+                        >
+                            <div className="card-body py-3">
+                                <h6 className="card-title mb-1 text-uppercase fw-bold opacity-75" style={{fontSize: '0.9rem'}}>{card.title}</h6>
+                                <h3 className="mb-0 fw-bold">{card.value}</h3>
+                            </div>
+                        </motion.div>
+                    </div>
+                ))}
+            </div>
+
+            <AnimatePresence>
+                {modalGralAbierto && (
+                    <ModalDetalleTareasGral 
+                        tareas={tareas} filtroInicial={filtroSeleccionadoGral}
+                        cerrarModal={() => setModalGralAbierto(false)}
+                        obtenerTiempo={obtenerTiempo} fueCompletadaHoy={fueCompletadaHoy}
+                        indicadores={indicadoresTareas}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// --- COMPONENTE TICKETS ---
+export const DashboardAgustinTickets = ({ tickets }) => {
     const agruparDatos = (propiedad) => {
         const conteo = tickets.reduce((acc, t) => {
             const clave = t[propiedad] || 'Sin especificar';
@@ -139,7 +187,6 @@ export const DashboardAgustin = ({ tickets, tareas, indicadoresTareas, obtenerTi
     const datosEstado = useMemo(() => {const agrupados = agruparDatos('estado'); return agrupados.filter(item => item.nombre !== 'Cerrado Definitivo');}, [tickets]);
     const datosPrioridad = useMemo(() => agruparDatos('prioridad'), [tickets]);
     const datosArea = useMemo(() => agruparDatos('nombre_area_origen'), [tickets]);
-    const datosCategoria = useMemo(() => agruparDatos('categoria'), [tickets]);
 
     const coloresEstado = { 'Abierto': '#dc3545', 'En Proceso': '#ffc107', 'Resuelto': '#198754' };
     const coloresPrioridad = { 'Urgente': '#dc3545', 'Alta': '#fd7e14', 'Media': '#0d6efd', 'Baja': '#20c997' };
@@ -147,135 +194,76 @@ export const DashboardAgustin = ({ tickets, tareas, indicadoresTareas, obtenerTi
 
     const RADIAN = Math.PI / 180;
     const renderEtiquetaPorcentaje = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-        const y = cy + radius * Math.sin(-midAngle * RADIAN);
         if (percent === 0) return null;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
         return (
-            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontWeight="bold" fontSize="12">
+            <text x={cx + radius * Math.cos(-midAngle * RADIAN)} y={cy + radius * Math.sin(-midAngle * RADIAN)} fill="white" textAnchor="middle" dominantBaseline="central" fontWeight="bold" fontSize="12">
                 {`${(percent * 100).toFixed(0)}%`}
             </text>
         );
     };
 
     return (
-        <div className="container-fluid mb-4 animate__animated animate__fadeIn">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h3 className="text-secondary m-0">📊 Dashboard Tareas: {usuarioLogueado || 'Coordinador'}</h3>
-                <span className="badge bg-dark">Vista de Supervisión Gral.</span>
+        <div className="row g-4 animate__animated animate__fadeIn">
+            <div className="col-12 mt-2 mb-1">
+                <h5 className="text-secondary fw-bold m-0 border-bottom pb-2">Distribución General de la Empresa</h5>
             </div>
-            
-            {/* --- SECCIÓN 1: DASHBOARD DE TAREAS (5 COLUMNAS) --- */}
-            <div className="row g-3 mb-5">
-                {[
-                    { id: 'TOTAL', title: 'TOTAL', value: tareas.length, color: 'secondary' },
-                    { id: 'ATRASADAS', title: 'ATRASADAS', value: indicadoresTareas.atrasadas, color: 'danger' },
-                    { id: 'PROCESO', title: 'EN PROCESO', value: indicadoresTareas.proceso, color: 'warning text-dark' },
-                    { id: 'PAUSA', title: 'EN PAUSA', value: indicadoresTareas.pausa, color: 'info text-dark' },
-                    { id: 'PROXIMAS', title: 'PRÓXIMAS', value: indicadoresTareas.proximas, color: 'primary' },
-                    { id: 'FINALIZADAS', title: 'FINALIZADAS', value: indicadoresTareas.finalizadas, color: 'success' } // 👈 LA NUEVA TARJETA
-                ].map(card => (
-                    <div key={card.id} className="col-12 col-sm-6 col-md"> {/* 👈 'col-md' hace que se dividan el espacio automáticamente */}
-                        <motion.div 
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.98 }}
-                            className={`card bg-${card.color.split(' ')[0]} ${card.color.includes('text-dark') ? 'text-dark' : 'text-white'} shadow-sm border-0 h-100`}
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => { setFiltroSeleccionadoGral(card.id); setModalGralAbierto(true); }}
-                        >
-                            <div className="card-body d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 className="mb-1 opacity-75" style={{fontSize: '0.8rem'}}>{card.title}</h6>
-                                    <h2 className="mb-0 fw-bold">{card.value}</h2>
-                                </div>
-                                <i className="fa-solid fa-chevron-right opacity-50"></i>
-                            </div>
-                        </motion.div>
-                    </div>
-                ))}
-            </div>
-
-            {/* --- SECCIÓN 2: GRÁFICOS DE TICKETS (SIN CAMBIOS) --- */}
-            <div className="row g-4">
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                <h3 className="text-secondary m-0">📊 Dashboard de Tickets (Coordinador General)</h3>
-            </div>
-                <div className="col-md-6 col-lg-3">
-                    
-                    <div className="card shadow-sm h-100 border-0">
-                        <div className="card-body">
-                            <h6 className="card-title text-center fw-bold text-muted mb-3">Estados de Tickets</h6>
-                            <div style={{ height: '220px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={datosEstado} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="cantidad" nameKey="nombre">
-                                            {datosEstado.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={coloresEstado[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend verticalAlign="bottom" />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="col-md-6 col-lg-3">
-                    <div className="card shadow-sm h-100 border-0">
-                        <div className="card-body">
-                            <h6 className="card-title text-center fw-bold text-muted mb-3">Prioridades</h6>
-                            <div style={{ height: '220px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={datosPrioridad} dataKey="cantidad" nameKey="nombre" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={renderEtiquetaPorcentaje}>
-                                            {datosPrioridad.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={coloresPrioridad[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend verticalAlign="bottom" />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="col-md-12 col-lg-6">
-                    <div className="card shadow-sm h-100 border-0">
-                        <div className="card-body">
-                            <h6 className="card-title fw-bold text-muted mb-3">Tickets por Área</h6>
-                            <div style={{ height: '220px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={datosArea}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="nombre" tick={{fontSize: 10}} />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Bar dataKey="cantidad" fill="#0d6efd" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+            <div className="col-md-6 col-lg-3">
+                <div className="card shadow-sm h-100 border-0">
+                    <div className="card-body">
+                        <h6 className="card-title text-center fw-bold text-muted mb-3">Estados Activos</h6>
+                        <div style={{ height: '220px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={datosEstado} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="cantidad" nameKey="nombre">
+                                        {datosEstado.map((entry, index) => <Cell key={`cell-${index}`} fill={coloresEstado[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />)}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend verticalAlign="bottom" />
+                                </PieChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- MODAL DE DETALLE DE TAREAS --- */}
-            <AnimatePresence>
-                {modalGralAbierto && (
-                    <ModalDetalleTareasGral 
-                        tareas={tareas}
-                        filtroInicial={filtroSeleccionadoGral}
-                        cerrarModal={() => setModalGralAbierto(false)}
-                        obtenerTiempo={obtenerTiempo}
-                        fueCompletadaHoy={fueCompletadaHoy}
-                        indicadores={indicadoresTareas}
-                    />
-                )}
-            </AnimatePresence>
+            <div className="col-md-6 col-lg-3">
+                <div className="card shadow-sm h-100 border-0">
+                    <div className="card-body">
+                        <h6 className="card-title text-center fw-bold text-muted mb-3">Prioridades de Atención</h6>
+                        <div style={{ height: '220px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={datosPrioridad} dataKey="cantidad" nameKey="nombre" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={renderEtiquetaPorcentaje}>
+                                        {datosPrioridad.map((entry, index) => <Cell key={`cell-${index}`} fill={coloresPrioridad[entry.nombre] || coloresGenerales[index % coloresGenerales.length]} />)}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend verticalAlign="bottom" />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="col-md-12 col-lg-6">
+                <div className="card shadow-sm h-100 border-0">
+                    <div className="card-body">
+                        <h6 className="card-title fw-bold text-muted mb-3">Demanda por Área</h6>
+                        <div style={{ height: '220px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={datosArea} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.5} />
+                                    <XAxis dataKey="nombre" tick={{fontSize: 10}} interval={0} angle={-35} textAnchor="end" height={60} />
+                                    <YAxis allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="cantidad" fill="#0d6efd" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

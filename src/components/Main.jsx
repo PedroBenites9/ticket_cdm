@@ -25,9 +25,12 @@ import ModalTarea from './ModalTarea';
 import ModalFinalizarTarea from './ModalFinalizarTarea';
 import { ModalHistorico } from './ModalHistorico'; 
 import ModalHistoricoTareas from './ModalHistoricoTareas';
+import ModalHistorialTarea from './ModalHistorialTarea'; 
+import DropdownReporte from './DropdownReporte';
+import TableroTareas from './TableroTarea';
 
 //Dashboard Agustin
-import { DashboardAgustin } from './ComponenteAgustin';
+import { DashboardAgustinTareas, DashboardAgustinTickets } from './ComponenteAgustin';
 import { ROLES } from '../utils/constants.js';
 
 const socket = io(import.meta.env.VITE_URL_BACKEND || '/');
@@ -43,6 +46,7 @@ export default function Main({ cambiarVista, usuario }) {
   const esAdmin = miRol === ROLES.ADMIN;
   const esTecnico = miRol === ROLES.TECNICO;
   const esCoordinadorGral = miRol === ROLES.COORDINADOR_GRAL;
+  const esCoordinadorArea = miRol === ROLES.COORDINADOR_AREA;
 
  // ==========================================
   // 1. HOOKS PRINCIPALES
@@ -58,7 +62,7 @@ export default function Main({ cambiarVista, usuario }) {
     formularioTarea, setFormularioTarea, manejarDias, guardarTarea, 
     marcarTareaCompletada, iniciarTarea, pausarTarea, eliminarTarea,
     exportarHistorialTareas, calcularTiempoTarea, fueCompletadaHoy, esTareaFutura, formatearFrecuenciaTexto, abrirModalEditarTarea,
-    indicadores, cargarIndicadores, marcarComoVista
+    indicadores, cargarIndicadores, marcarComoVista, asignarTarea
   } = useTareas(URL_API, usuario, mostrarCarga, ocultarCarga);
 
   // Hook de Tickets
@@ -121,59 +125,22 @@ export default function Main({ cambiarVista, usuario }) {
   const [listaRoles, setListaRoles] = useState([]);
   const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
   const [historialSeleccionado, setHistorialSeleccionado] = useState([]); 
+  const [mostrarModalReporteTareas, setMostrarModalReporteTareas] = useState(false);
 
+
+  // Historial por Tarea (Modal Nuevo)
+  const [mostrarModalHistorialTarea, setMostrarModalHistorialTarea] = useState(false);
+  const [tareaIdHistorial, setTareaIdHistorial] = useState(null);
   // Navegación (Pestañas)
   const [pestañaActual, setPestañaActual] = useState('tickets');
 
   //filtros de tareas 
   const [ordenTareas, setOrdenTareas] = useState('proxima'); // Por defecto ordena por fecha
+  const [pestanaActivaDashboard, setPestanaActivaDashboard] = useState('tickets'); // Nested tab
   
   // ==========================================
-  // 4. GESTIÓN DE INACTIVIDAD Y SESIÓN
+  // 4. GESTIÓN DE SESIÓN
   // ==========================================
-  const cerrarSesionAuto = () => {
-    localStorage.removeItem('token_acceso'); 
-    localStorage.removeItem('nombre_usuario');
-    localStorage.removeItem('rol_usuario');
-    localStorage.removeItem('area_usuario');
-    localStorage.removeItem('horaLogin');
-    toast.warning("⏱️ Tu sesión ha expirado por seguridad.");
-    cambiarVista('login');
-  };
-
-  useEffect(() => {
-    let ultimoRegistro = Date.now();
-    const registrarActividad = () => {
-      const ahora = Date.now();
-      if (ahora - ultimoRegistro > 2000) {
-        localStorage.setItem('ultimaActividad', ahora);
-        ultimoRegistro = ahora;
-      }
-    };
-    localStorage.setItem('ultimaActividad', Date.now());
-    window.addEventListener('mousemove', registrarActividad);
-    window.addEventListener('keydown', registrarActividad);
-    window.addEventListener('click', registrarActividad);
-    window.addEventListener('scroll', registrarActividad);
-
-    const patrullero = setInterval(() => {
-      const ultimaVez = parseInt(localStorage.getItem('ultimaActividad') || Date.now());
-      const tiempoActual = Date.now();
-      const limiteInactividad = 30 * 60 * 1000;
-      if (tiempoActual - ultimaVez > limiteInactividad) {
-        cerrarSesionAuto();
-      }
-    }, 60000);
-
-    return () => {
-      window.removeEventListener('mousemove', registrarActividad);
-      window.removeEventListener('keydown', registrarActividad);
-      window.removeEventListener('click', registrarActividad);
-      window.removeEventListener('scroll', registrarActividad);
-      clearInterval(patrullero);
-    };
-  }, []);
-
 
 
   useEffect(() => {
@@ -184,19 +151,11 @@ export default function Main({ cambiarVista, usuario }) {
   // 5. ESTADO DERIVADO Y CÁLCULOS
   // ==========================================
   
-  // Hook para hacer "latir" a React cada 1 minuto
-  const [ticker, setTicker] = useState(0);
+
 
   // ==========================================
   // 6. EFECTOS DE CARGA Y WEBSOCKETS
   // ==========================================
-
-  // Efecto para actualizar el tiempo en pantalla (Ticker)
-  useEffect(() => {
-    // Actualiza el estado 'ticker' cada 60.000 ms (1 minuto) para refrescar contadores de tiempo en pantalla
-    const intervalo = setInterval(() => setTicker(t => t + 1), 60000);
-    return () => clearInterval(intervalo); // Limpieza cuando se cierra la pantalla
-  }, []);
 
   // Efecto para la carga inicial de datos desde la API
   useEffect(() => {
@@ -204,7 +163,7 @@ export default function Main({ cambiarVista, usuario }) {
       try {
         // Obtenemos todos los datos en paralelo para hacer la carga más rápida
         const [respuestaTickets, respuestaClientes, respuestaTareas, respuestaAreas, respuestaRoles, respuestaUsuario] = await Promise.all([
-          fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}`),
+          fetch(`${URL_API}/tickets?id_rol=${encodeURIComponent(rolUsuario)}&id_area=${encodeURIComponent(areaUsuario)}&solicitante=${encodeURIComponent(usuario)}`),
           fetch(`${URL_API}/clientes`),
           fetch(`${URL_API}/tareas`),
           fetch(`${URL_API}/usuarios/areas`),
@@ -236,7 +195,7 @@ export default function Main({ cambiarVista, usuario }) {
     // WEBSOCKETS: GESTIÓN DE TICKETS Y BITÁCORA
     // ==================================================
 
-    // 1. Escuchar creación de nuevos tickets
+    // 1. Escuchar creación de nuevos ticketstick
    const manejarTicketCreado = (nuevoTicket) => {
         // 1. Aseguramos que todo sea un número entero (parseInt)
         const miRol = parseInt(localStorage.getItem('rol_usuario') || rolUsuario);
@@ -379,25 +338,31 @@ export default function Main({ cambiarVista, usuario }) {
   // 7. FUNCIONES HANDLERS (MODALES Y DATOS)
   // ==========================================
 
-  const exportarAExcel = () => {
-    const datosParaExcel = ticketsFiltrados.map(ticket => ({
-      "Código": ticket.codigo,
+  const exportarTicketsExcel = () => {
+    if (!tickets || tickets.length === 0) {
+      toast.error("No hay tickets en el sistema para exportar.");
+      return;
+    }
+
+    const datosParaExcel = tickets.map(ticket => ({
+      "Código": ticket.codigo || `TK-${ticket.id}`,
       "Asunto": ticket.asunto,
-      "Origen": ticket.tipo_origen || 'Interno',
-      "Cliente / Solicitante": ticket.tipo_origen === 'Externo' ? (ticket.cliente || 'Sin cliente') : (ticket.solicitante || 'Usuario'),
-      "Categoría": ticket.categoria,
+      "Solicitante": ticket.solicitante,
+      "Origen / Cliente": ticket.tipo_origen === 'Externo' ? (ticket.cliente || 'Externo') : 'Interno',
+      "Categoría IT": ticket.categoria,
       "Prioridad": ticket.prioridad,
-      "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
       "Estado": ticket.estado,
-      "Fecha de Creación": new Date(ticket.fecha_creacion).toLocaleDateString(),
-      "Fecha Finalizado": ticket.fecha_finalizado ? new Date(ticket.fecha_finalizado).toLocaleDateString() : 'Pendiente',
-      "Descripción Detallada": ticket.descripcion
+      "Técnico Asignado": ticket.tecnico_asignado || 'Sin asignar',
+      "Fecha de Creación": ticket.fecha_creacion ? new Date(ticket.fecha_creacion).toLocaleString('es-AR') : 'Sin registro',
+      "Fecha de Finalización": ticket.fecha_finalizado ? new Date(ticket.fecha_finalizado).toLocaleString('es-AR') : 'N/A'
     }));
+
     const hoja = XLSX.utils.json_to_sheet(datosParaExcel);
     const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "Reporte IT");
-    XLSX.writeFile(libro, "Reporte_Soporte_IT.xlsx");
-    toast.success("¡Reporte de Excel descargado con éxito!");
+    XLSX.utils.book_append_sheet(libro, hoja, "Todos los Tickets");
+    XLSX.writeFile(libro, "Reporte_Completo_Tickets_CruzDeMalta.xlsx");
+    
+    toast.success("¡Excel generado con los registros!");
   };
   
   const abrirPanelUsuarios = async () => {
@@ -503,11 +468,11 @@ export default function Main({ cambiarVista, usuario }) {
   // Si sos un usuario final, el filtro solo deja pasar los tickets que vos creaste.
 
   const ticketsParaLaTabla = useMemo(() => {
-    if (esAdmin || esTecnico) {
+    if (esAdmin || esTecnico|| esCoordinadorGral) {
       return ticketsOrdenados;
     }
     
-    if (esCoordinadorGral) {
+    if (esCoordinadorArea) {
       // El coordinador general solo ve los tickets de su área en la tabla
       return ticketsOrdenados.filter(t => t.id_area === parseInt(areaUsuario));
     }
@@ -518,7 +483,7 @@ export default function Main({ cambiarVista, usuario }) {
         const usuarioLimpio = (usuario || '').toLowerCase().trim();
         return solicitanteLimpio === usuarioLimpio;
     });
-  }, [ticketsOrdenados, esAdmin, esTecnico, esCoordinadorGral, usuario, areaUsuario]);
+  }, [ticketsOrdenados, esAdmin, esTecnico, esCoordinadorGral, esCoordinadorArea, usuario, areaUsuario]);
 
   const ticketsPaginados = ticketsParaLaTabla.slice(indicePrimerTicket, indiceUltimoTicket);
     
@@ -659,7 +624,7 @@ export default function Main({ cambiarVista, usuario }) {
             return tiempoA - tiempoB;
         }
 
-        // 4. EL ORDEN INTELIGENTE (ATRASADA > PROCESO > PAUSA > PENDIENTE)
+        // 4. EL ORDEN (ATRASADA > PROCESO > PAUSA > PENDIENTE)
         if (ordenTareas === 'atrasadas') {
             
             // Función interna que asigna el "peso" (1 al 5) según el estado
@@ -759,23 +724,31 @@ export default function Main({ cambiarVista, usuario }) {
            t.estado !== 'En Curso';
     }).length;
 
-    const handleVerHistorial = async (idTarea) => {
+    const abrirHistorialTarea = (tarea) => {
+        setTareaIdHistorial(tarea.id);
+        setMostrarModalHistorialTarea(true);
+    };
+
+    const handleVerHistorialGlobal = async () => {
         try {
-            const response = await fetch(`${URL_API}/tareas/historial/${idTarea}`);
+            // Llamamos a la ruta sin ID, que nos devuelve TODO el historial
+            const response = await fetch(`${URL_API}/tareas/historial`);
             
             if (response.ok) {
                 const data = await response.json();
-                
                 setHistorialSeleccionado(data);
-                setMostrarModalHistorial(true);
+                setMostrarModalHistorial(true); // Reutilizamos tu mismo modal
             } else {
-                console.error("Error al obtener el historial de la tarea");
+                toast.error("Error al obtener el historial global");
             }
         } catch (error) {
             console.error("Error de red:", error);
+            toast.error("Error de conexión al servidor");
         }
     };
-  // ==========================================
+
+  // ===============
+  // ===========================
   // 11. RENDERIZADO DEL COMPONENTE (UI)
   // ==========================================
   return (
@@ -841,7 +814,7 @@ export default function Main({ cambiarVista, usuario }) {
                 className={`nav-link text-dark d-flex align-items-center ${pestañaActual === 'tareas' ? 'active fw-bold border-bottom-0 shadow-sm' : 'bg-light border'}`} 
                 onClick={() => setPestañaActual('tareas')}
               >
-                🔄 Mantenimiento y Rutinas
+                📋 Tareas Rutinarias 
                 
                 {/* 🔴 EL GLOBITO DE NOTIFICACIÓN EN LA PESTAÑA */}
                 {indicadores?.cantidadNuevas > 0 && (
@@ -867,7 +840,7 @@ export default function Main({ cambiarVista, usuario }) {
           )}
           <div className="d-flex gap-2">
             {parseInt(rolUsuario) === ROLES.ADMIN && (
-              <button className="btn btn-success fw-bold shadow-sm" onClick={exportarAExcel}>
+              <button className="btn btn-success fw-bold shadow-sm" onClick={exportarTicketsExcel}>
                 📊 Descargar Excel
               </button>
             )}
@@ -880,114 +853,143 @@ export default function Main({ cambiarVista, usuario }) {
           </div>
         </div>
 
-        {parseInt(rolUsuario) === ROLES.ADMIN && (
-          <div className="row mb-4">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h3 className="text-secondary m-0">📊 Dashboard de Tickets (Administrador)</h3>
-            </div>
-            <div className="col-md-3 col-6 mb-3">
-              <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
-                <div className="card-body py-3">
-                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total</h6>
-                  <h3 className="mb-0 fw-bold">{totalTickets}</h3>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-3 col-6 mb-3">
-              <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
-                <div className="card-body py-3">
-                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Abiertos</h6>
-                  <h3 className="mb-0 fw-bold">{ticketsAbiertos}</h3>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-3 col-6 mb-3">
-              <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
-                <div className="card-body py-3">
-                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Proceso</h6>
-                  <h3 className="mb-0 fw-bold">{ticketsEnProceso}</h3>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-3 col-6 mb-3">
-              <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
-                <div className="card-body py-3">
-                  <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Resueltos</h6>
-                  <h3 className="mb-0 fw-bold">{ticketsResueltos}</h3>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
+        {/* ====================================================  */}
+        {/* LÓGICA DE PESTAÑAS (DASHBOARDS)                       */}
+        {/* ====================================================  */}
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.COORDINADOR_GRAL) && (
-          <>
-              <DashboardAgustin 
-              tickets={tickets} 
-              tareas={tareas}
-              obtenerTiempo={obtenerTiempo}
-              fueCompletadaHoy={fueCompletadaHoy}
-              usuarioLogueado={usuario}
-              indicadoresTareas={{
-                atrasadas: rutinasAtrasadas,
-                proceso: rutinasEnProceso,
-                pausa: rutinasPausadas,
-                proximas: rutinasProximas,
-                finalizadas: rutinasFinalizadas
-              }}
-              />
-              
-          </>
-           
-           )}
-           
-        {(parseInt(rolUsuario) === ROLES.ADMIN ) && (
-          <div className="row mb-4">
-            <div className="col-12 col-md-6 col-lg-3 mb-3">
-              <div className="card shadow-sm h-100 border-0 p-3">
-                
-                <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado</h6>
-                <div style={{ height: '250px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={datosEstado} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                        {datosEstado.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORES_ESTADO[index % COLORES_ESTADO.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+            <div className="container-fluid mb-5 mt-4 p-0 bg-white rounded-4 shadow-sm border p-4">
+                <ul className="nav nav-pills mb-4 border-bottom pb-3 gap-2">
+                    <li className="nav-item">
+                        <button 
+                            className={`nav-link fw-bold px-4 py-2 rounded-pill ${pestanaActivaDashboard === 'tickets' ? 'active bg-primary text-white shadow-sm' : 'bg-light text-muted border'}`}
+                            onClick={() => setPestanaActivaDashboard('tickets')}
+                            style={{ cursor: 'pointer', transition: 'all 0.3s' }}
+                        >
+                            🎫 Analítica de Tickets
+                        </button>
+                    </li>
+                    <li className="nav-item">
+                        <button 
+                            className={`nav-link fw-bold px-4 py-2 rounded-pill ${pestanaActivaDashboard === 'tareas' ? 'active bg-primary text-white shadow-sm' : 'bg-light text-muted border'}`}
+                            onClick={() => setPestanaActivaDashboard('tareas')}
+                            style={{ cursor: 'pointer', transition: 'all 0.3s' }}
+                        >
+                            📋 Analítica de Rutinas
+                        </button>
+                    </li>
+                </ul>
+
+                <div className="tab-content">
+                    {/* PESTAÑA A: TICKETS */}
+                    {pestanaActivaDashboard === 'tickets' && (
+                        <div className="animate__animated animate__fadeIn">
+                            {parseInt(rolUsuario) === ROLES.ADMIN && (
+                              <div className="row mb-4">
+                                <div className="d-flex justify-content-between align-items-center mb-4">
+                                    <h4 className="text-secondary m-0 fw-bold">📊 Dashboard de Tickets (General)</h4>
+                                </div>
+                                <div className="col-md-3 col-6 mb-3">
+                                  <div className="card bg-secondary text-white text-center shadow-sm h-100 border-0">
+                                    <div className="card-body py-3">
+                                      <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total</h6>
+                                      <h3 className="mb-0 fw-bold">{totalTickets}</h3>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3 col-6 mb-3">
+                                  <div className="card bg-danger text-white text-center shadow-sm h-100 border-0">
+                                    <div className="card-body py-3">
+                                      <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Abiertos</h6>
+                                      <h3 className="mb-0 fw-bold">{ticketsAbiertos}</h3>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3 col-6 mb-3">
+                                  <div className="card bg-warning text-dark text-center shadow-sm h-100 border-0">
+                                    <div className="card-body py-3">
+                                      <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>En Proceso</h6>
+                                      <h3 className="mb-0 fw-bold">{ticketsEnProceso}</h3>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3 col-6 mb-3">
+                                  <div className="card bg-success text-white text-center shadow-sm h-100 border-0">
+                                    <div className="card-body py-3">
+                                      <h6 className="card-title mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Resueltos</h6>
+                                      <h3 className="mb-0 fw-bold">{ticketsResueltos}</h3>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* El dashboard gráfico grande */}
+                            <DashboardAgustinTickets tickets={tickets} />
+                            
+                            {/* Distribución estado / Categorías en la misma vista */}
+                            {parseInt(rolUsuario) === ROLES.ADMIN && (
+                              <div className="row mb-4 mt-2">
+                                <div className="col-12 col-md-6 mb-3">
+                                  <div className="card shadow-sm h-100 border-0 p-3 bg-light">
+                                    <h6 className="text-center fw-bold text-secondary mb-3">Distribución por Estado (Simplificada)</h6>
+                                    <div style={{ height: '250px' }}>
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                          <Pie data={datosEstado} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                            {datosEstado.map((entry, index) => (
+                                              <Cell key={`cell-${index}`} fill={COLORES_ESTADO[index % COLORES_ESTADO.length]} />
+                                            ))}
+                                          </Pie>
+                                          <Tooltip />
+                                          <Legend />
+                                        </PieChart>
+                                      </ResponsiveContainer>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-12 col-md-6 mb-3">
+                                  <div className="card shadow-sm h-100 border-0 p-3 bg-light">
+                                    <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría IT</h6>
+                                    <div style={{ height: '250px' }}>
+                                      <ResponsiveContainer width="100%" height="100%">
+                                       <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                          <XAxis type="number" allowDecimals={false} />
+                                          <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 11}} />
+                                          <Tooltip />
+                                          <Bar dataKey="cantidad" fill="#343a40" radius={[0, 5, 5, 0]} />
+                                        </BarChart>
+                                      </ResponsiveContainer>
+                                    </div>
+                                  </div>
+                                </div>            
+                              </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* PESTAÑA B: TAREAS */}
+                    {pestanaActivaDashboard === 'tareas' && (
+                        <DashboardAgustinTareas 
+                            tareas={tareas}
+                            obtenerTiempo={obtenerTiempo}
+                            fueCompletadaHoy={fueCompletadaHoy}
+                            usuarioLogueado={usuario}
+                            indicadoresTareas={{
+                                atrasadas: rutinasAtrasadas, proceso: rutinasEnProceso,
+                                pausa: rutinasPausadas, proximas: rutinasProximas, finalizadas: rutinasFinalizadas
+                            }}
+                        />
+                    )}
                 </div>
-              </div>
             </div>
-            <div className="col-12 col-md-6 col-lg-3 mb-3">
-              <div className="card shadow-sm h-100 border-0 p-3">
-                <h6 className="text-center fw-bold text-secondary mb-3">Incidencias por Categoría</h6>
-                <div style={{ height: '250px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={datosCategoria} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      
-                      <XAxis type="number" allowDecimals={false} />
-                      
-                      <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 11}} />
-                      <Tooltip />
-                      <Bar dataKey="cantidad" fill="#343a40" radius={[0, 5, 5, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>            
-          </div>
         )}
 
         {/* 10. Filtros Globales (Disponibles para todos los usuarios) */}
         <div className="row mb-3 gx-2">
-         
+         <h2 className="text-secondary fw-bold">Filtros</h2>
           {/* align-items-stretch hace que todos compartan exactamente el mismo alto */}
           <div className="d-flex flex-wrap align-items-center  gap-2 mb-3">        
-    
+              
                 {/* 1. Buscador (Queda igual, es perfecto) */}
                 <div className="input-group shadow-sm" style={{ width: '250px' }}>
                     <span className="input-group-text bg-white border-end-0">🔍</span>
@@ -995,6 +997,7 @@ export default function Main({ cambiarVista, usuario }) {
                 </div>
                 {/* EL ESCUDO INVISIBLE: Solo aparece si hay un menú abierto y cubre toda la pantalla por detrás del menú */}
                 {menuAbierto && (
+                  
                     <div 
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1040 }} 
                         onClick={() => setMenuAbierto(null)}
@@ -1004,6 +1007,7 @@ export default function Main({ cambiarVista, usuario }) {
                 {/* 2. Filtro de ORIGEN */}
                 {/* ========================================= */}
                 <div className="dropdown" style={{ position: 'relative', zIndex: menuAbierto === 'origen' ? 1050 : 1045 }}>
+                  
                     <button 
                         className="btn btn-outline-secondary bg-white text-dark d-flex align-items-center gap-2" 
                         type="button" 
@@ -1061,7 +1065,8 @@ export default function Main({ cambiarVista, usuario }) {
                                 { id: 'CCTV', label: '📹 CCTV' },
                                 { id: 'Reportes', label: '📄 Reportes' },
                                 { id: 'Mantenimiento', label: '🔧 Mantenimiento' },
-                                { id: 'Porgramas/Aplicaciones', label: '🗄️ Porgramas/Aplicaciones' },
+                                { id: 'Porgramas/Aplicaciones', label: '🗄️ Programas/Aplicaciones' },
+                                { id: 'Presupuestos', label: '📄 Presupuestos' },
                             ].map(opcion => (
                                 <li key={opcion.id}>
                                     <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()}>
@@ -1178,7 +1183,7 @@ export default function Main({ cambiarVista, usuario }) {
                 <tr>
                   <th>Código</th>
                   <th>Origen</th>
-                  {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
+                  {(esAdmin || esTecnico || esCoordinadorGral || esCoordinadorArea) && (
                   <th>Solicitante / Cliente</th>
                   )}
                   <th>Asunto</th>
@@ -1193,6 +1198,7 @@ export default function Main({ cambiarVista, usuario }) {
                 {cargando ? (
                   <tr><td colSpan="10">Cargando...</td></tr>
                 ) : ticketsPaginados.length > 0 ? (ticketsPaginados.map((ticket) => (
+                
                    <tr key={ticket.id} title={ticket.descripcion} 
                     style={{ cursor: 'pointer' }}>
                       {/* 1. Código */}
@@ -1205,7 +1211,8 @@ export default function Main({ cambiarVista, usuario }) {
                           {ticket.tipo_origen || 'Interno'}
                         </span>
                       </td>
-                        {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && (
+                      
+                       {(esAdmin || esTecnico || esCoordinadorGral || esCoordinadorArea) && (        
                         <td>
                           {ticket.tipo_origen === 'Externo' ? (
                             <>
@@ -1221,7 +1228,7 @@ export default function Main({ cambiarVista, usuario }) {
                             <span>👤 {ticket.solicitante || 'Usuario'}</span>
                           )}
                         </td>
-                      )}
+)}
                       {/* 4. Asunto */}
                       <td>{ticket.asunto}
                         
@@ -1270,7 +1277,7 @@ export default function Main({ cambiarVista, usuario }) {
                           </div>
                         ) : (
                           <div className="d-flex justify-content-center align-items-center gap-1">
-                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN) && (
+                             {(parseInt(rolUsuario) === ROLES.TECNICO || parseInt(rolUsuario) === ROLES.ADMIN ) && (
                                <select className="form-select form-select-sm border-secondary shadow-sm" style={{ width: '105px' }} value={ticket.estado} onChange={(e) => cambiarEstadoTicket(ticket.id, e.target.value)}>
                                  <option value="Abierto">Abierto</option>
                                  <option value="En Proceso">En Proceso</option>
@@ -1350,314 +1357,53 @@ export default function Main({ cambiarVista, usuario }) {
         {/* ==================================================== */}
         {(parseInt(rolUsuario) === ROLES.ADMIN || parseInt(rolUsuario) === ROLES.TECNICO) && pestañaActual === 'tareas' && (
           <div className="animate__animated animate__fadeIn">
-            <h2 className="h3 text-secondary">Control de Tareas Diarias</h2>
-              
-              <div className="d-flex gap-2">
+            <div className="d-flex gap-2 mb-3">
                 {parseInt(rolUsuario) === ROLES.ADMIN && (
-                  <button className="btn btn-success fw-bold shadow-sm" onClick={exportarHistorialTareas}>
-                    📊 Descargar Historial
-                  </button>
+                  <>
+                    {parseInt(rolUsuario) === ROLES.ADMIN && (
+                      <DropdownReporte exportarHistorialTareas={exportarHistorialTareas} />
+                    )}  
+                    
+                  </>
                 )}
+                
                 <button className="btn btn-primary shadow-sm" onClick={() => { 
-                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '09:00', dias_especificos: [], fecha_unica: ''}); 
+                  setFormularioTarea({id: null, titulo: '', categoria: 'Limpieza / General', frecuencia: 'Dias Especificos', hora_programada: '00:00', dias_especificos: [], fecha_unica: ''}); 
                   setMostrarModalTarea(true); 
                 }}>
                   + Nuevo
                 </button>
+                <button className="btn btn-secondary fw-bold shadow-sm" onClick={handleVerHistorialGlobal}>
+                      🗄️ Ver Historial Global
+                    </button>
               </div>
-
-            <div className="row mt-4 mb-4">
-              {/* CONTADORES DE TAREAS */}
-              <div className="row mb-4 text-center">
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-secondary text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>TOTAL</h6>
-                              <h3 className="mb-0 fw-bold">{tareasTotales}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-primary text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>EN CURSO</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasEnProceso}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-warning text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PAUSADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasPausadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-danger text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>ATRASADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasAtrasadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-                  
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-info text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>PRÓXIMAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasProximas}</h3>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="col-md col-6 mb-2">
-                      <div className="card bg-success text-white shadow-sm h-100">
-                          <div className="card-body py-2">
-                              <h6 className="text-uppercase fw-bold mb-1" style={{ fontSize: '0.8rem' }}>FINALIZADAS</h6>
-                              <h3 className="mb-0 fw-bold">{rutinasFinalizadas}</h3>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-            </div>
-
-            
-            <div className="card shadow-sm border-0 mb-3">
-              {/* NUEVO: Filtros y Buscador de Tareas */}
-            <div className="card shadow-sm border-0 mb-3">
-              <div className="card-body p-3">
-                {/* Fila Superior: Botones de Categoría */}
-                <div className="d-flex flex-wrap gap-2 mb-3">
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Todas' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setFiltroCategoriaTarea('Todas')}>Todas</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Limpieza / General' ? 'btn-info text-white' : 'btn-outline-info'}`} onClick={() => setFiltroCategoriaTarea('Limpieza / General')}>🧹 Limpieza</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'CCTV y Servidores' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFiltroCategoriaTarea('CCTV y Servidores')}>📹 CCTV y Servidores</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Redes' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFiltroCategoriaTarea('Redes')}>🌐 Redes</button>
-                  <button className={`btn btn-sm ${filtroCategoriaTarea === 'Reportes' ? 'btn-warning' : 'btn-outline-warning'}`} onClick={() => setFiltroCategoriaTarea('Reportes')}>📑 Reportes</button>
-                </div>
-
-                {/* Fila Inferior: Buscador y Selectores */}
-                <div className="row g-2">
-                  <div className="col-md-6">
-                  
-                  {/* Grupo de Buscador y Ordenado */}
-                    <div className="d-flex gap-2 w-100 w-md-auto">
-                      <div className="input-group input-group-sm shadow-sm" style={{ maxWidth: '250px' }}>
-                          <span className="input-group-text bg-white border-end-0">🔍</span>
-                          <input 
-                              type="text" 
-                              className="form-control border-start-0" 
-                              placeholder="Buscar rutina..." 
-                              value={busquedaTarea}
-                              onChange={(e) => setBusquedaTarea(e.target.value)}
-                          />
-                      </div>
-                      
-                      <select 
-                          className="form-select form-select-sm border-info shadow-sm w-auto"
-                          value={ordenTareas}
-                          onChange={(e) => setOrdenTareas(e.target.value)}
-                      >
-                          <option value="proxima">📅 Próxima Ejecución</option>
-                          <option value="atrasadas">⚠️ Atrasadas Primero</option>
-                          <option value="nombre">🔤 Nombre (A-Z)</option>
-                          <option value="categoria">📁 Por Categoría</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-              <div className="card-body p-0 table-responsive">
-                <table className="table table-hover mb-0 text-center align-middle" style={{ fontSize: '0.9rem' }}>
-                  <thead className="table-light">
-                    <tr>
-                      <th>Rutina a realizar</th>
-                      <th>Categoría</th>
-                      <th>Frecuencia</th>
-                      <th>Próxima Ejecución</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                   {tareasFiltradas.length > 0 ? (tareasFiltradas.map(tarea => {
-                        // Verificamos si la tarea ya se completó hoy
-                        const completadaHoy = fueCompletadaHoy(tarea.ultima_vez_completada);
-                        const tareaFutura = esTareaFutura(tarea.proxima_ejecucion);
-                        
-                        const estaTerminada = tarea.estado === 'Finalizada' || completadaHoy;
-
-                        let minutosMostrados = tarea.tiempo_acumulado_minutos || 0;
-
-                        // Si la tarea está corriendo, le sumamos la diferencia de tiempo en vivo
-                        if (tarea.estado === 'En Curso' && tarea.fecha_inicio_real) {
-                            const milisegundosPasados = new Date() - new Date(tarea.fecha_inicio_real);
-                            const minutosExtra = milisegundosPasados / 1000 / 60;
-
-                            if (minutosExtra > 0) {
-                                minutosMostrados += minutosExtra;
-                            }
-                        }
-                        return (
-                          <tr 
-                            key={tarea.id} 
-                            // Si está completada, le bajamos la opacidad al 50% para el efecto difuminado
-                            style={{ opacity: estaTerminada ? 0.5 : 1, transition: 'opacity 0.3s ease' }}
-                            onClick={() => marcarComoVista(tarea.id)}
-
-                          >
-                            {/* Tachamos el título si ya está lista */}
-                            <td className={`fw-bold text-start ps-4 ${completadaHoy ? 'text-decoration-line-through text-muted' : ''}`}>
-                              {tarea.titulo}
-                              {indicadores?.idsNuevas?.includes(tarea.id) && (
-                                <span className="badge bg-danger rounded-circle p-1 ms-2 d-inline-block" title="¡Tarea Nueva!" style={{ width: '10px', height: '10px' }}>
-                                  <span className="visually-hidden">Tarea Nueva</span>
-                                </span>
-                              )}
-                            </td>
-                            <td><span className="badge bg-secondary">{tarea.categoria}</span></td>
-                            <td className="text-secondary fw-semibold">
-                              {formatearFrecuenciaTexto(tarea)} <span className="text-dark fw-normal">(⏰ {tarea.hora_programada?.substring(0, 5)})</span>
-                            </td>
-                           
-                            <td>
-                              <div className="d-flex flex-column align-items-center gap-1">
-                                {completadaHoy ? (
-                                  <span className="fw-bold px-2 py-1 rounded bg-success bg-opacity-75 text-white shadow-sm" style={{ fontSize: '0.85rem' }}>
-                                    Próxima: {new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                                  </span>
-                                ) : (
-                                  <>
-                                    {/* 1. Mostramos la cuenta regresiva o la hora programada original */}
-                                    <small className="text-muted fw-bold d-block mb-1">
-                                      {tarea.estado_visual === 'Esperando fecha' 
-                                        ? calcularTiempoTarea(tarea) 
-                                        : `Prog: ${new Date(tarea.proxima_ejecucion).toLocaleDateString('es-AR')} ${tarea.hora_programada?.substring(0, 5)}`}
-                                    </small>
-
-                                    {/* 2. El badge dinámico SOLO aparece cuando hay un estado crítico o activo */}
-                                    {tarea.estado_visual !== 'Esperando fecha' && (
-                                      <span className={`badge ${coloresEstado[tarea.estado_visual]} shadow-sm px-2 py-1`} style={{ fontSize: '0.8rem' }}>
-                                        {iconosEstado[tarea.estado_visual]} {tarea.estado_visual}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                            {/* 5. Acciones y Botones del Cronómetro */}
-                            <td className="align-middle">
-                              {/* Contenedor principal: Columna vertical centrada */}
-                              <div className="d-flex flex-column align-items-center gap-1">
-
-                                <div className="d-flex align-items-center justify-content-center gap-2">
-                                  <button 
-                                    className="btn btn-sm btn-outline-info" 
-                                    onClick={() => handleVerHistorial(tarea.id)}
-                                    title="Ver Historial"
-                                  >
-                                    🕒
-                                  </button>
-                                  {completadaHoy ? (
-                                    <>
-                                      <span className="badge bg-light text-success border border-success px-3 py-2 shadow-sm">
-                                        ✔️ Lista por hoy
-                                      </span>
-                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                        🗑️
-                                      </button>
-                                    </>
-                                  ) : tareaFutura ? (
-                                    <>
-                                      <span className="badge bg-light text-secondary border px-3 py-2 shadow-sm">
-                                        ⏳ Esperando fecha
-                                      </span>
-                                      <button className="btn btn-outline-danger btn-sm shadow-sm" title="Eliminar Rutina" onClick={() => eliminarTarea(tarea.id)}>
-                                        🗑️
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {/* Botón Iniciar */}
-                                      {(!tarea.estado || tarea.estado === 'Pendiente' || tarea.estado === 'Pausada' || tarea.en_pausa == 1) && (
-                                        <button 
-                                          className="btn btn-primary btn-sm fw-bold shadow-sm px-3" 
-                                          onClick={() => iniciarTarea(tarea.id)} 
-                                          title="Iniciar o Reanudar tarea"
-                                        >
-                                          ▶ Iniciar
-                                        </button>
-                                      )}
-
-                                      {/* Botón Pausar */}
-                                      {(tarea.estado === 'En Curso' && !tarea.en_pausa) && (
-                                        <button 
-                                          className="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" 
-                                          onClick={() => pausarTarea(tarea.id)} 
-                                          title="Pausar por una emergencia"
-                                        >
-                                          ⏸ Pausar
-                                        </button>
-                                      )}
-
-                                      {/* Botón Finalizar */}
-                                      <button 
-                                        className={`btn ${tarea.estado === 'En Curso' ? 'btn-success' : 'btn-outline-success'} btn-sm fw-bold shadow-sm px-3`} 
-                                        onClick={() => {
-                                          setTareaSeleccionadaFinalizar(tarea);
-                                          setMostrarModalFinalizar(true);
-                                        }}
-                                        title="Finalizar tarea"
-                                      >
-                                        ✅ Finalizar
-                                      </button>
-                                      
-                                      {/* Botón Eliminar */}
-                                      <button 
-                                        className="btn btn-outline-danger btn-sm shadow-sm" 
-                                        title="Eliminar Rutina" 
-                                        onClick={() => eliminarTarea(tarea.id)}
-                                      >
-                                        🗑️
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {/* Botón Editar (Siempre visible y alineado al final) */}
-                                  <button 
-                                    className="btn btn-outline-warning btn-sm shadow-sm" 
-                                    title="Editar Rutina" 
-                                    onClick={() => abrirModalEditarTarea(tarea)}
-                                  >
-                                    ✏️
-                                  </button>
-
-                                </div>
-                                {!completadaHoy && !tareaFutura && (tarea.estado === 'En Curso' || tarea.tiempo_acumulado_minutos >= 0) && (
-                                  <div className="text-muted mt-1 text-center w-100" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                    ⏱️ {Math.floor(minutosMostrados)} min dedicados
-                                    {tarea.estado === 'En Curso' && !tarea.en_pausa && (
-                                      <span className="ms-1 text-primary"> (corriendo...)</span>
-                                    )}
-                                  </div>
-                                )}
-
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr><td colSpan="5" className="text-muted py-4">No hay rutinas programadas. ¡Crea la primera!</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <TableroTareas 
+                tareas={tareasFiltradas}
+                iniciarTarea={iniciarTarea}
+                pausarTarea={pausarTarea}
+                setTareaSeleccionadaFinalizar={setTareaSeleccionadaFinalizar}
+                setMostrarModalFinalizar={setMostrarModalFinalizar}
+                formatearFrecuenciaTexto={formatearFrecuenciaTexto}
+                indicadores={indicadores}
+                marcarComoVista={marcarComoVista}
+                asignarTarea={asignarTarea}
+                esAdmin={esAdmin}
+                abrirModalEditarTarea={abrirModalEditarTarea}
+                usuarioLogueado={usuario?.nombre || usuario}
+                usuariosLista={usuariosLista}
+                abrirHistorialTarea={abrirHistorialTarea}
+            />
           </div>
+        )}
+
+        {/* --- MODALES DE TAREAS --- */}
+        {mostrarModalHistorialTarea && (
+          <ModalHistorialTarea 
+            mostrar={mostrarModalHistorialTarea}
+            setMostrar={setMostrarModalHistorialTarea}
+            tareaId={tareaIdHistorial}
+            URL_API={URL_API}
+          />
         )}
       {VistaCarga}
       {/* Renderizamos el Modal solo si el estado es true */}
@@ -1666,6 +1412,7 @@ export default function Main({ cambiarVista, usuario }) {
               tickets={tickets} // Le pasás tu lista completa de tickets cruda
               cerrarModal={() => setMostrarModalHistorico(false)} 
               areasDisponibles={areasDisponibles}
+              abrirModalTicket={abrirModalEditar}
           />
       )}
       {mostrarModalHistorial && (
@@ -1714,6 +1461,14 @@ export default function Main({ cambiarVista, usuario }) {
         setMostrar={setMostrarModalFinalizar}
         tarea={tareaSeleccionadaFinalizar}
         marcarTareaCompletada={marcarTareaCompletada}
+        usuariosLista={usuariosLista}
+        rolUsuario={rolUsuario}
+        usuarioLogueado={usuario}
+        indicadores={indicadores}
+        marcarComoVista={marcarComoVista}
+        asignarTarea={asignarTarea}
+        esAdmin={esAdmin}
+        URL_API={URL_API}
       />
     </motion.div>
   );
